@@ -2,6 +2,51 @@
 <html>
   <head>
     <title>Server Health Monitoring</title>
+    <style>
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        background: rgb(237, 219, 255);
+        color: black;
+      }
+      
+      h1 {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        text-align: center;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+      }
+      
+      p {
+        font-size: 1.2rem;
+        margin: 0.5rem 0;
+        text-align: center;
+      }
+      
+      a {
+        display: inline-block;
+        margin-top: 1.5rem;
+        padding: 12px 30px;
+        background-color: black;
+        color: white;
+        text-decoration: none;
+        border-radius: 5px;
+        font-weight: bold;
+        transition: transform 0.2s, box-shadow 0.2s;
+        
+      }
+      
+      a:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+      }
+    </style>
   </head>
   <body>
     <h1>Server Health Monitoring and CI/CD Deployment Dashboard</h1>

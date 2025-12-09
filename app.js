@@ -7,6 +7,7 @@ const mongoose = require("mongoose");
 dotenv.config();
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
@@ -64,11 +65,19 @@ const checkServerHealth = async () => {
         for (let server of servers) {
             try {
                 const response = await axios.get(server.url, { timeout: 3000 });
-                statuses[server.name] = { status: "Up", reason: null };
+                statuses[server.name] = { status: "Up", reason: "OK 200" };
             } catch (error) {
+                let reason = 'Connection failed';
+                if (error.response) {
+                    reason = `HTTP ${error.response.status} ${error.response.statusText || ''}`;
+                } else if (error.code) {
+                    reason = error.code; // e.g., ECONNREFUSED, ETIMEDOUT
+                } else if (error.message) {
+                    reason = error.message;
+                }
                 statuses[server.name] = {
                     status: "Down",
-                    reason: error.response?.statusText || error.message || "Unknown Error",
+                    reason: reason,
                 };
             }
             server.status = statuses[server.name].status;
@@ -152,13 +161,14 @@ app.delete("/servers/:name", authenticate, async (req, res) => {
 });
 
 // Update /logs to fetch from MongoDB
-app.get("/logs", authenticate, async (req, res) => {
-    try {
-        const logs = await Log.find();
-        res.json(logs);
-    } catch (error) {
-        res.status(500).json({ message: "Internal Server Error", error: error.message });
-    }
+app.post('/logs_delete', authenticate, async (req, res) => {
+  try {
+    await Log.deleteMany({});
+    res.redirect('/dashboard');
+  } catch (err) {
+    console.error('Delete logs error:', err);
+    return res.status(500).json({ message: 'Internal Server Error' });
+  }
 });
 
 // Add endpoint to view deployment history
@@ -187,8 +197,8 @@ app.get("/dashboard", async (req, res) => {
 
     try {
         const serverHealth = await checkServerHealth(); // Fetch server health
-        const logs = await Log.find();
-        const deployments = await Deployment.find(); // Ensure deployments are fetched
+        const logs = await Log.find().sort({ timestamp: -1 }); // Sort by timestamp descending (latest first)
+        const deployments = await Deployment.find().sort({ timestamp: -1 }); // Sort by timestamp descending (latest first)
 
         res.render('dashboard', {
             url: url || "N/A",
@@ -196,13 +206,21 @@ app.get("/dashboard", async (req, res) => {
             pipelineStatus: PIPELINE_STATUS,
             serverHealth,
             logs,
-            deployments
+            deployments,
         });
     } catch (error) {
         res.status(500).json({ message: "Internal Server Error", error: error.message });
     }
 });
 
+setInterval(async () => {
+  try {
+    await checkServerHealth();
+    console.log("Auto health check completed.");
+  } catch (err) {
+    console.error("Auto health check failed:", err);
+  }
+}, 60 * 1000);
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`https://localhost:${PORT}`);

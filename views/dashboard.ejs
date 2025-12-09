@@ -1,70 +1,434 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Dashboard</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Server Monitoring Dashboard</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        h1, h2 { color: #333; }
-        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #f4f4f4; }
-        form { margin-bottom: 20px; }
-        input[type="text"] { padding: 8px; width: 300px; }
-        button { padding: 8px 12px; }
+        /* Human-centered, handcrafted styles */
+        :root{
+            --bg: #f6f8fa;
+            --card: #ffffff;
+            --muted: #6b7280;
+            --accent: #4f46e5; /* indigo */
+            --danger: #e11d48; /* rose */
+            --success: #059669; /* emerald */
+            --border: #e6e7eb;
+            --glass: rgba(255,255,255,0.6);
+        }
+        *{box-sizing:border-box}
+        html,body{height:100%}
+        body{
+            margin:0;
+            font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+            background:linear-gradient(180deg,#eef2ff 0%, #f8fafc 100%);
+            color:#0f172a;
+            padding:24px;
+        }
+        .wrap{
+            max-width:1100px;
+            margin:0 auto;
+        }
+        header.app-header{
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:16px;
+            margin-bottom:18px;
+        }
+        header h1{
+            font-size:1.5rem;
+            color:var(--accent);
+            margin:0;
+            display:flex;
+            align-items:center;
+            gap:10px;
+        }
+        header .meta small{color:var(--muted)}
+
+        main.grid{
+            display:grid;
+            grid-template-columns: 1fr 420px;
+            gap:20px;
+        }
+        @media (max-width:900px){main.grid{grid-template-columns:1fr}}
+
+        .card{
+            background:var(--card);
+            border-radius:10px;
+            padding:18px;
+            border:1px solid var(--border);
+            box-shadow: 0 6px 20px rgba(10,10,20,0.04);
+        }
+        .panel-row{display:flex;gap:12px;align-items:center}
+        .panel-col{flex:1}
+        .small{font-size:0.84rem;color:var(--muted)}
+        .databox{display:flex;gap:12px;align-items:center}
+        .badge{padding:6px 10px;border-radius:999px;font-weight:600;font-size:0.86rem}
+        .badge.success{background:rgba(5,150,105,0.08);color:var(--success);border:1px solid rgba(5,150,105,0.12)}
+        .badge.danger{background:rgba(225,29,72,0.06);color:var(--danger);border:1px solid rgba(225,29,72,0.1)}
+        .badge.neutral{background:rgba(71,85,105,0.04);color:var(--muted);border:1px solid rgba(71,85,105,0.03)}
+
+        /* Server grid */
+        .server-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+        .server-card{padding:12px;border-radius:8px;border:1px solid var(--border);display:flex;flex-direction:column;gap:6px}
+        .server-name{font-weight:600;color:#0f172a}
+        .server-reason{font-size:0.85rem;color:var(--muted)}
+
+        /* Tables */
+        table{width:100%;border-collapse:collapse;font-size:0.95rem}
+        thead th{background:transparent;color:var(--muted);font-weight:700;padding:12px 10px;text-align:left;border-bottom:1px solid var(--border)}
+        tbody td{padding:12px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+        tbody tr:hover td{background:linear-gradient(90deg,#ffffff 0%,#f6f8fa 100%);}
+
+        /* Delete logs button */
+        .actions{display:flex;align-items:center;justify-content:flex-end;gap:8px}
+        .btn{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;background:var(--accent);color:white;border:none;cursor:pointer}
+        .btn.ghost{background:transparent;color:var(--accent);border:1px solid rgba(79,70,229,0.12)}
+        .btn.danger{background:var(--danger)}
+        input[type="password"]{padding:8px 10px;border-radius:6px;border:1px solid var(--border);width:160px}
+
+        /* Empty states */
+        .empty-state{padding:28px;text-align:center;color:var(--muted)}
+
+        /* Modal styles */
+        .modal{display:none;position:fixed;z-index:100;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.5);align-items:center;justify-content:center}
+        .modal.show{display:flex}
+        .modal-content{background:white;border-radius:12px;padding:24px;max-width:480px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
+        .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+        .modal-header h3{margin:0;color:var(--accent)}
+        .modal-close{background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--muted);padding:0;width:32px;height:32px}
+        .modal-close:hover{color:var(--danger)}
+        .form-group{margin-bottom:16px}
+        .form-group label{display:block;margin-bottom:6px;font-weight:600;color:#334155}
+        .form-group input{width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:0.95rem}
+        .form-group input:focus{outline:none;border-color:var(--accent)}
+        .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+        .btn.secondary{background:#e5e7eb;color:#374151}
+        .btn.secondary:hover{background:#d1d5db}
+        .add-btn{background:var(--success);margin-left:8px}
+        .add-btn:hover{background:#047857}
+        .remove-btn{background:var(--danger);padding:6px 10px;font-size:0.85rem}
+        .remove-btn:hover{background:#be123c}
+
+        footer{margin-top:18px;text-align:center;color:var(--muted);font-size:0.9rem}
     </style>
 </head>
 <body>
-    <h1>Dashboard</h1>
-    <form method="get" action="/dashboard">
-        <label for="url">Check URL Status:</label>
-        <input type="text" id="url" name="url" placeholder="Enter URL" required>
-        <button type="submit">Check</button>
-    </form>
-    <p><strong>URL:</strong> <%= url %></p>
-    <p><strong>Status:</strong> <%= urlStatus %></p>
-    <p><strong>CI/CD Status:</strong> <%= pipelineStatus %></p>
-    <h2>Server Health</h2>
-    <table>
-        <tr>
-            <th>Server</th>
-            <th>Status</th>
-            <th>Reason</th>
-        </tr>
-        <% Object.entries(serverHealth).forEach(([server, { status, reason }]) => { %>
-            <tr>
-                <td><%= server %></td>
-                <td><%= status %></td>
-                <td><%= reason || "N/A" %></td>
-            </tr>
-        <% }); %>
-    </table>
-    <h2>Logs</h2>
-    <table>
-        <tr>
-            <th>Timestamp</th>
-            <th>Statuses</th>
-        </tr>
-        <% logs.forEach(log => { %>
-            <tr>
-                <td><%= log.timestamp %></td>
-                <td><%= JSON.stringify(log.statuses) %></td>
-            </tr>
-        <% }); %>
-    </table>
-    <h2>Deployment History</h2>
-    <table>
-        <tr>
-            <th>Version</th>
-            <th>Status</th>
-            <th>Timestamp</th>
-        </tr>
-        <% deployments.forEach(deployment => { %>
-            <tr>
-                <td><%= deployment.version %></td>
-                <td><%= deployment.status %></td>
-                <td><%= new Date(deployment.timestamp).toLocaleString() %></td>
-            </tr>
-        <% }); %>
-    </table>
+    <div class="wrap">
+        <header class="app-header">
+            <h1>DashBoard</h1>
+            <div class="meta">
+                <small>Monitoring your servers and deployments</small>
+            </div>
+            <div style="display:flex;gap:8px">
+                <button class="btn add-btn" onclick="openModal('serverModal')">+ Add Server</button>
+                <button class="btn add-btn" onclick="openModal('deployModal')">+ Deploy</button>
+            </div>
+        </header>
+
+        <main class="grid">
+            <section class="card">
+                <div class="panel-row">
+                    <div class="panel-col">
+                        <div class="databox">
+                            <div>
+                                <div class="small">URL</div>
+                                <div style="font-weight:600"> <%= url || 'N/A' %> </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="text-align:right" class="panel-col">
+                        <div class="small">Status</div>
+                        <div class="badge <%= urlStatus==='Up' ? 'success' : (urlStatus==='Down' ? 'danger' : 'neutral') %>"><%= urlStatus || 'Unknown' %></div>
+                    </div>
+                </div>
+                <hr style="margin:12px 0;border:none;border-top:1px solid var(--border)">
+                <div class="panel-row" style="margin-bottom:8px">
+                    <div class="panel-col">
+                        <div class="small">CI/CD Pipeline</div>
+                        <div class="badge <%= pipelineStatus==='success' ? 'success' : 'danger' %>"><%= pipelineStatus %></div>
+                    </div>
+                    <div class="panel-col actions" style="justify-content:flex-end">
+                        <form method="get" action="/dashboard" style="display:flex;gap:8px;align-items:center">
+                            <input aria-label="check-url" type="text" id="url" name="url" placeholder="https://example.com" value="<%= url !== 'N/A' ? url : '' %>" style="padding:8px 10px;border-radius:6px;border:1px solid var(--border);width:280px"/>
+                            <button class="btn ghost" type="submit">Check</button>
+                        </form>
+                    </div>
+                </div>
+                <div style="margin-top:12px">
+                    <h2 style="margin:0 0 8px 0">Server Health</h2>
+                    <% if (serverHealth && Object.keys(serverHealth).length > 0) { %>
+                        <div class="server-grid">
+                            <% Object.entries(serverHealth).forEach(([server, { status, reason }]) => { %>
+                                <div class="server-card">
+                                    <div style="display:flex;justify-content:space-between;align-items:start">
+                                        <div class="server-name"><%= server %></div>
+                                        <button class="btn remove-btn" onclick="removeServer('<%= server %>')">✕</button>
+                                    </div>
+                                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                                        <div class="badge <%= status === 'Up' ? 'success' : 'danger' %>"><%= status %></div>
+                                        <div class="server-reason"><%= reason || 'No details' %></div>
+                                    </div>
+                                </div>
+                            <% }); %>
+                        </div>
+                    <% } else { %>
+                        <div class="empty-state">No servers configured. Add servers using the button above</div>
+                    <% } %>
+                </div>
+            </section>
+
+            <aside>
+                <div class="card" style="margin-bottom:18px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                        <div>
+                            <div style="font-weight:600">Activity Logs</div>
+                            <div class="small">Last check snapshots</div>
+                        </div>
+                        <div class="actions">
+                            <form id="deleteLogsForm" onsubmit="event.preventDefault(); handleDeleteLogs();" style="display:flex;gap:8px;align-items:center">
+                                <input type="password" id="apiKeyInput" placeholder="API key" aria-label="API key" required/>
+                                <button class="btn danger" type="submit" aria-label="Delete logs">Clear Logs</button>
+                            </form>
+                        </div>
+                    </div>
+                    <% if (logs && logs.length > 0) { %>
+                        <table>
+                            <thead>
+                                <tr><th>Timestamp</th><th>Statuses</th></tr>
+                            </thead>
+                            <tbody>
+                                <% logs.forEach(log => { %>
+                                    <tr>
+                                        <td><%= new Date(log.timestamp).toLocaleString() %></td>
+                                        <td style="white-space:pre-wrap;font-family:monospace;color:#334155;font-size:0.85rem"> <%= JSON.stringify(log.statuses, null, 2) %></td>
+                                    </tr>
+                                <% }); %>
+                            </tbody>
+                        </table>
+                    <% } else { %>
+                        <div class="empty-state">No activity logs yet</div>
+                    <% } %>
+                </div>
+
+                <div class="card">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                        <div>
+                            <div style="font-weight:600">Deployment History</div>
+                            <div class="small">Recent deploys</div>
+                        </div>
+                    </div>
+                    <% if (deployments && deployments.length > 0) { %>
+                        <table>
+                            <thead>
+                                <tr><th>Version</th><th>Status</th><th>When</th></tr>
+                            </thead>
+                            <tbody>
+                                <% deployments.forEach(dep => { %>
+                                    <tr>
+                                        <td><%= dep.version %></td>
+                                        <td><div class="badge <%= dep.status === 'success' ? 'success' : 'danger' %>"><%= dep.status %></div></td>
+                                        <td><%= new Date(dep.timestamp).toLocaleString() %></td>
+                                    </tr>
+                                <% }); %>
+                            </tbody>
+                        </table>
+                    <% } else { %>
+                        <div class="empty-state">No deployment history available</div>
+                    <% } %>
+                </div>
+            </aside>
+        </main>
+    </div>
+
+    <!-- Add Server Modal -->
+    <div id="serverModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Add New Server</h3>
+                <button class="modal-close" onclick="closeModal('serverModal')">&times;</button>
+            </div>
+            <form id="addServerForm" onsubmit="event.preventDefault(); addServer();">
+                <div class="form-group">
+                    <label for="serverName">Server Name</label>
+                    <input type="text" id="serverName" placeholder="e.g., production-api" required />
+                </div>
+                <div class="form-group">
+                    <label for="serverUrl">Server URL</label>
+                    <input type="url" id="serverUrl" placeholder="https://your-server.com" required />
+                </div>
+                <div class="form-group">
+                    <label for="serverApiKey">API Key</label>
+                    <input type="password" id="serverApiKey" placeholder="Your API key" required />
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn secondary" onclick="closeModal('serverModal')">Cancel</button>
+                    <button type="submit" class="btn">Add Server</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Deploy Modal -->
+    <div id="deployModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Trigger Deployment</h3>
+                <button class="modal-close" onclick="closeModal('deployModal')">&times;</button>
+            </div>
+            <form id="deployForm" onsubmit="event.preventDefault(); triggerDeploy();">
+                <div class="form-group">
+                    <label for="deployVersion">Version</label>
+                    <input type="text" id="deployVersion" placeholder="e.g., v1.2.3" required />
+                </div>
+                <div class="form-group">
+                    <label for="deployApiKey">API Key</label>
+                    <input type="password" id="deployApiKey" placeholder="Your API key" required />
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn secondary" onclick="closeModal('deployModal')">Cancel</button>
+                    <button type="submit" class="btn">Deploy</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Modal functions
+        function openModal(modalId) {
+            document.getElementById(modalId).classList.add('show');
+        }
+        
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('show');
+            // Reset forms
+            if(modalId === 'serverModal') document.getElementById('addServerForm').reset();
+            if(modalId === 'deployModal') document.getElementById('deployForm').reset();
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal')) {
+                event.target.classList.remove('show');
+            }
+        }
+
+        // Add Server
+        async function addServer() {
+            const name = document.getElementById('serverName').value.trim();
+            const url = document.getElementById('serverUrl').value.trim();
+            const apiKey = document.getElementById('serverApiKey').value.trim();
+            
+            if (!name || !url || !apiKey) {
+                alert('All fields are required');
+                return;
+            }
+
+            try {
+                const res = await fetch('/servers', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-api-key': apiKey
+                    },
+                    body: JSON.stringify({ name, url })
+                });
+
+                const data = await res.json();
+                if (res.ok) {
+                    alert('Server added successfully!');
+                    closeModal('serverModal');
+                    window.location.reload();
+                } else {
+                    alert(data.message || 'Failed to add server');
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
+        // Remove Server
+        async function removeServer(serverName) {
+            const apiKey = prompt('Enter API key to confirm server removal:');
+            if (!apiKey) return;
+
+            try {
+                const res = await fetch(`/servers/${encodeURIComponent(serverName)}`, {
+                    method: 'DELETE',
+                    headers: { 'x-api-key': apiKey }
+                });
+
+                const data = await res.json();
+                if (res.ok) {
+                    alert('Server removed successfully!');
+                    window.location.reload();
+                } else {
+                    alert(data.message || 'Failed to remove server');
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
+        // Trigger Deployment
+        async function triggerDeploy() {
+            const version = document.getElementById('deployVersion').value.trim();
+            const apiKey = document.getElementById('deployApiKey').value.trim();
+            
+            if (!version || !apiKey) {
+                alert('All fields are required');
+                return;
+            }
+
+            try {
+                const res = await fetch('/deploy', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-api-key': apiKey
+                    },
+                    body: JSON.stringify({ version })
+                });
+
+                const data = await res.json();
+                if (res.ok) {
+                    alert(`Deployment triggered! Version: ${version}`);
+                    closeModal('deployModal');
+                    setTimeout(() => window.location.reload(), 2000);
+                } else {
+                    alert(data.message || 'Failed to trigger deployment');
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
+        // Delete Logs
+        async function handleDeleteLogs(){
+            const apiKey = document.getElementById('apiKeyInput').value.trim();
+            if(!apiKey){
+                alert('Please enter an API key.');
+                return;
+            }
+            const button = document.querySelector('#deleteLogsForm button');
+            const original = button.innerHTML;
+            button.disabled = true;
+            button.innerHTML = 'Deleting...';
+            try{
+                const res = await fetch('/logs_delete', {method:'POST', headers:{'x-api-key':apiKey}});
+                if(res.ok){
+                    window.location.reload();
+                } else {
+                    const data = await res.json();
+                    alert(data.message || 'Failed to delete logs');
+                }
+            } catch(err){
+                alert('Error deleting logs: '+err.message);
+            } finally{
+                button.disabled = false; button.innerHTML = original;
+            }
+        }
+    </script>
 </body>
 </html>
