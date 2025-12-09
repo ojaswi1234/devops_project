@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1, h2 { color: #333; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f4f4f4; }
+        form { margin-bottom: 20px; }
+        input[type="text"] { padding: 8px; width: 300px; }
+        button { padding: 8px 12px; }
+    </style>
+</head>
+<body>
+    <h1>Dashboard</h1>
+    <form method="get" action="/dashboard">
+        <label for="url">Check URL Status:</label>
+        <input type="text" id="url" name="url" placeholder="Enter URL" required>
+        <button type="submit">Check</button>
+    </form>
+    <p><strong>URL:</strong> <%= url %></p>
+    <p><strong>Status:</strong> <%= urlStatus %></p>
+    <p><strong>CI/CD Status:</strong> <%= pipelineStatus %></p>
+    <h2>Server Health</h2>
+    <table>
+        <tr>
+            <th>Server</th>
+            <th>Status</th>
+            <th>Reason</th>
+        </tr>
+        <% Object.entries(serverHealth).forEach(([server, { status, reason }]) => { %>
+            <tr>
+                <td><%= server %></td>
+                <td><%= status %></td>
+                <td><%= reason || "N/A" %></td>
+            </tr>
+        <% }); %>
+    </table>
+    <h2>Logs</h2>
+    <table>
+        <tr>
+            <th>Timestamp</th>
+            <th>Statuses</th>
+        </tr>
+        <% logs.forEach(log => { %>
+            <tr>
+                <td><%= log.timestamp %></td>
+                <td><%= JSON.stringify(log.statuses) %></td>
+            </tr>
+        <% }); %>
+    </table>
+    <h2>Deployment History</h2>
+    <table>
+        <tr>
+            <th>Version</th>
+            <th>Status</th>
+            <th>Timestamp</th>
+        </tr>
+        <% deployments.forEach(deployment => { %>
+            <tr>
+                <td><%= deployment.version %></td>
+                <td><%= deployment.status %></td>
+                <td><%= new Date(deployment.timestamp).toLocaleString() %></td>
+            </tr>
+        <% }); %>
+    </table>
+</body>
+</html>
