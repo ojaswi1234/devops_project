@@ -30,6 +30,14 @@ const DeploymentSchema = new mongoose.Schema({
     version: { type: String, required: true },
     status: { type: String, required: true },
     timestamp: { type: Date, default: Date.now },
+    provider: { type: String, default: "manual" }, // manual, render
+    project: { type: String }, // Project/service name
+    environment: { type: String }, // production, staging, etc.
+    externalId: { type: String }, // External deployment ID from provider
+    url: { type: String }, // External deployment URL
+    commitId: { type: String }, // Git commit ID
+    commitMessage: { type: String }, // Git commit message
+    rawPayload: { type: Object }, // Full webhook payload for debugging
 });
 
 const Server = mongoose.model("Server", ServerSchema);
@@ -171,6 +179,36 @@ app.post('/logs_delete', authenticate, async (req, res) => {
   }
 });
 
+// Render webhook endpoint (no authentication for external webhooks)
+app.post("/webhooks/render", async (req, res) => {
+    try {
+        const payload = req.body;
+        console.log("Render webhook received:", JSON.stringify(payload, null, 2));
+
+        // Extract deployment data from Render webhook
+        const deployment = new Deployment({
+            version: payload.commit?.id?.substring(0, 7) || "unknown",
+            status: payload.status || "unknown", // live, building, failed, etc.
+            timestamp: payload.updatedAt ? new Date(payload.updatedAt) : new Date(),
+            provider: "render",
+            project: payload.service?.name || "unknown",
+            environment: payload.service?.environment || "production",
+            externalId: payload.id,
+            url: payload.service?.url,
+            commitId: payload.commit?.id,
+            commitMessage: payload.commit?.message,
+            rawPayload: payload,
+        });
+
+        await deployment.save();
+        console.log("Render deployment saved:", deployment);
+        res.status(200).json({ message: "Webhook received" });
+    } catch (error) {
+        console.error("Webhook error:", error);
+        res.status(500).json({ message: "Webhook processing failed", error: error.message });
+    }
+});
+
 // Add endpoint to view deployment history
 app.get("/deployments", authenticate, async (req, res) => {
     try {
@@ -180,6 +218,115 @@ app.get("/deployments", authenticate, async (req, res) => {
         res.status(500).json({ message: "Internal Server Error", error: error.message });
     }
 });
+
+// Fetch deployments directly from Render API
+// ...existing code...
+
+// Render API integration - fetch live deployment data
+app.get("/render-deployments", authenticate, async (req, res) => {
+    try {
+        const apiKey = process.env.RENDER_API_KEY;
+        
+        if (!apiKey) {
+            console.error("RENDER_API_KEY not set in .env file");
+            return res.status(500).json({ error: "Render API key not configured" });
+        }
+
+        console.log("Making request to Render API with key:", apiKey.substring(0, 10) + "...");
+        
+        const response = await axios.get("https://api.render.com/v1/services", {
+            headers: {
+                "Authorization": `Bearer ${apiKey}`,
+                "Accept": "application/json"
+            },
+            timeout: 10000
+        });
+
+        console.log("Render API Response Status:", response.status);
+        console.log("Response structure:", JSON.stringify(response.data).substring(0, 500));
+
+        // Render API returns array of service objects wrapped in {service: {...}}
+        const services = Array.isArray(response.data) ? response.data : [];
+        console.log(`Found ${services.length} services`);
+        
+        const deployments = [];
+
+        for (const serviceWrapper of services) {
+            try {
+                // Extract the actual service object
+                const service = serviceWrapper.service || serviceWrapper;
+                
+                if (!service || !service.id) {
+                    console.log("Skipping invalid service:", serviceWrapper);
+                    continue;
+                }
+
+                const serviceId = service.id;
+                const serviceName = service.name;
+                console.log(`Fetching deploys for: ${serviceName} (${serviceId})`);
+
+                const deployResponse = await axios.get(
+                    `https://api.render.com/v1/services/${serviceId}/deploys`,
+                    {
+                        headers: {
+                            "Authorization": `Bearer ${apiKey}`,
+                            "Accept": "application/json"
+                        },
+                        params: { limit: 5 }
+                    }
+                );
+
+                // Parse deploy response (also might be wrapped)
+                let deploys = [];
+                if (Array.isArray(deployResponse.data)) {
+                    deploys = deployResponse.data;
+                } else if (deployResponse.data && Array.isArray(deployResponse.data.deploys)) {
+                    deploys = deployResponse.data.deploys;
+                }
+
+                deploys.forEach(deployWrapper => {
+                    const deploy = deployWrapper.deploy || deployWrapper;
+                    deployments.push({
+                        serviceName: serviceName,
+                        serviceType: service.type,
+                        status: deploy.status || 'unknown',
+                        commitId: deploy.commit?.id,
+                        commitMessage: deploy.commit?.message,
+                        serviceUrl: service.serviceDetails?.url,
+                        createdAt: deploy.createdAt || new Date().toISOString(),
+                        environment: service.env || 'production'
+                    });
+                });
+            } catch (deployError) {
+                const service = serviceWrapper.service || serviceWrapper;
+                console.error(`Error fetching deploys for service ${service?.id || 'unknown'}:`, {
+                    message: deployError.message,
+                    status: deployError.response?.status
+                });
+            }
+        }
+
+        res.json(deployments);
+    } catch (error) {
+        console.error("Render API error details:", {
+            message: error.message,
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            data: error.response?.data
+        });
+        
+        if (error.response?.status === 401) {
+            res.status(401).json({ 
+                error: "Unauthorized - Check your Render API key",
+                hint: "Get your API key from https://dashboard.render.com/u/settings#api-keys"
+            });
+        } else {
+            res.status(500).json({ error: error.message });
+        }
+    }
+});
+
+// ...existing code...
 
 // Update /dashboard endpoint to ensure server health is displayed correctly
 app.get("/dashboard", async (req, res) => {

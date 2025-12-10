@@ -17,7 +17,7 @@
             --glass: rgba(255,255,255,0.6);
         }
         *{box-sizing:border-box}
-        html,body{height:100%}
+        html,body{height: auto;}
         body{
             margin:0;
             font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
@@ -111,6 +111,17 @@
         .remove-btn{background:var(--danger);padding:6px 10px;font-size:0.85rem}
         .remove-btn:hover{background:#be123c}
 
+        /* External Deployment Monitoring Styles */
+        .external-deploy-card{padding:14px;border-radius:8px;border:1px solid var(--border);margin-bottom:10px;background:linear-gradient(135deg,#ffffff 0%,#f9fafb 100%)}
+        .deploy-header{display:flex;justify-content:space-between;align-items:start;margin-bottom:10px}
+        .deploy-title{font-weight:600;color:#0f172a;font-size:0.95rem}
+        .deploy-meta{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+        .deploy-info{font-size:0.88rem;color:var(--muted)}
+        .deploy-commit{font-family:monospace;font-size:0.85rem;color:#334155;background:#f1f5f9;padding:4px 8px;border-radius:4px;display:inline-block;margin-top:6px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .external-link{display:inline-flex;align-items:center;gap:4px;color:var(--accent);text-decoration:none;font-size:0.88rem;padding:4px 8px;border-radius:4px;border:1px solid rgba(79,70,229,0.12);background:rgba(79,70,229,0.02)}
+        .external-link:hover{background:rgba(79,70,229,0.08)}
+        .refresh-indicator{font-size:0.8rem;color:var(--muted);font-style:italic}
+
         footer{margin-top:18px;text-align:center;color:var(--muted);font-size:0.9rem}
     </style>
 </head>
@@ -143,7 +154,7 @@
                         <div class="badge <%= urlStatus==='Up' ? 'success' : (urlStatus==='Down' ? 'danger' : 'neutral') %>"><%= urlStatus || 'Unknown' %></div>
                     </div>
                 </div>
-                <hr style="margin:12px 0;border:none;border-top:1px solid var(--border)">
+                <hr style="margin:12px 0;border:none;border-top:1px solid black;">
                 <div class="panel-row" style="margin-bottom:8px">
                     <div class="panel-col">
                         <div class="small">CI/CD Pipeline</div>
@@ -176,10 +187,20 @@
                     <% } else { %>
                         <div class="empty-state">No servers configured. Add servers using the button above</div>
                     <% } %>
+                    <hr style="margin:18px 0;border:none;border-top:1px solid var(--border)">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                        <div>
+                            <div style="font-weight:600">External Deployments (Render)</div>
+                            <div class="small">Live deployment status from webhooks</div>
+                        </div>
+                        <button class="btn ghost" onclick="refreshExternalDeployments()" style="padding:6px 10px;font-size:0.85rem">↻ Refresh</button>
+                    </div>
+                    <div id="externalDeploymentsContainer">
+                        <div class="empty-state">Loading external deployments...</div>
+                    </div>
+                    <div class="refresh-indicator" id="lastRefreshTime" style="margin-top:8px;text-align:right"></div>
                 </div>
-            </section>
 
-            <aside>
                 <div class="card" style="margin-bottom:18px">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
                         <div>
@@ -193,6 +214,15 @@
                             </form>
                         </div>
                     </div>
+                </div>
+                
+                
+            </section>
+
+            <aside>
+                <!-- External Deployment Monitoring (Render) -->
+                <div class="card" style="margin-bottom:18px">
+                    
                     <% if (logs && logs.length > 0) { %>
                         <table>
                             <thead>
@@ -429,6 +459,144 @@
                 button.disabled = false; button.innerHTML = original;
             }
         }
+
+        // External Deployments Functions
+        let externalDeployApiKey = null;
+
+        async function fetchExternalDeployments() {
+            if (!externalDeployApiKey) {
+                externalDeployApiKey = prompt('Enter API key to view Render deployments:');
+                if (!externalDeployApiKey) {
+                    document.getElementById('externalDeploymentsContainer').innerHTML = 
+                        '<div class="empty-state">API key required to view deployments</div>';
+                    return;
+                }
+            }
+
+            try {
+                const res = await fetch('/render-deployments', {
+                    headers: { 'x-api-key': externalDeployApiKey }
+                });
+
+                if (!res.ok) {
+                    throw new Error('Failed to fetch Render deployments');
+                }
+
+                const deployments = await res.json();
+                displayExternalDeployments(deployments);
+                updateLastRefreshTime();
+            } catch (err) {
+                console.error('Error fetching Render deployments:', err);
+                document.getElementById('externalDeploymentsContainer').innerHTML = 
+                    '<div class="empty-state">Error loading Render deployments. Check API key or Render API configuration.</div>';
+                externalDeployApiKey = null; // Reset API key on error
+            }
+        }
+
+        function displayExternalDeployments(deployments) {
+            const container = document.getElementById('externalDeploymentsContainer');
+            
+            if (!deployments || deployments.length === 0) {
+                container.innerHTML = '<div class="empty-state">No Render deployments found</div>';
+                return;
+            }
+
+            let html = '';
+            deployments.forEach(dep => {
+                const statusClass = getRenderStatusClass(dep.status);
+                const providerBadge = `<span class="badge neutral">render</span>`;
+                const statusBadge = `<span class="badge ${statusClass}">${dep.status}</span>`;
+                const typeBadge = dep.serviceType ? `<span class="badge neutral">${escapeHtml(dep.serviceType)}</span>` : '';
+                const commitShort = dep.commitId ? dep.commitId.substring(0, 7) : 'N/A';
+                
+                html += `
+                    <div class="external-deploy-card">
+                        <div class="deploy-header">
+                            <div class="deploy-title">${escapeHtml(dep.serviceName || 'Unknown Service')}</div>
+                            ${providerBadge}
+                        </div>
+                        <div class="deploy-meta">
+                            ${statusBadge}
+                            ${typeBadge}
+                            <span class="deploy-info">${commitShort}</span>
+                        </div>
+                        ${dep.commitMessage ? `<div class="deploy-commit" title="${escapeHtml(dep.commitMessage)}">${escapeHtml(truncate(dep.commitMessage, 60))}</div>` : ''}
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:10px;flex-wrap:wrap">
+                            <span class="small">${formatTimestamp(dep.createdAt)}</span>
+                            ${dep.serviceUrl ? `<a href="${escapeHtml(dep.serviceUrl)}" target="_blank" class="external-link">View Live →</a>` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function getRenderStatusClass(status) {
+            if (!status) return 'neutral';
+            const statusLower = status.toLowerCase();
+            if (statusLower === 'live' || statusLower === 'success') return 'success';
+            if (statusLower === 'failed' || statusLower === 'failure' || statusLower === 'build_failed' || statusLower === 'deactivated') return 'danger';
+            if (statusLower === 'building' || statusLower === 'pre_deploy_in_progress' || statusLower === 'update_in_progress') return 'neutral';
+            return 'neutral';
+        }
+
+        function getDeploymentStatusClass(status) {
+            if (!status) return 'neutral';
+            const statusLower = status.toLowerCase();
+            if (statusLower === 'live' || statusLower === 'success') return 'success';
+            if (statusLower === 'failed' || statusLower === 'failure') return 'danger';
+            return 'neutral';
+        }
+
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diff = now - date;
+            const minutes = Math.floor(diff / 60000);
+            const hours = Math.floor(diff / 3600000);
+            const days = Math.floor(diff / 86400000);
+
+            if (minutes < 1) return 'Just now';
+            if (minutes < 60) return `${minutes}m ago`;
+            if (hours < 24) return `${hours}h ago`;
+            if (days < 7) return `${days}d ago`;
+            return date.toLocaleDateString();
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function truncate(text, length) {
+            return text.length > length ? text.substring(0, length) + '...' : text;
+        }
+
+        function updateLastRefreshTime() {
+            const now = new Date();
+            document.getElementById('lastRefreshTime').textContent = 
+                `Last updated: ${now.toLocaleTimeString()}`;
+        }
+
+        function refreshExternalDeployments() {
+            document.getElementById('externalDeploymentsContainer').innerHTML = 
+                '<div class="empty-state">Refreshing...</div>';
+            fetchExternalDeployments();
+        }
+
+        // Auto-refresh external deployments every 30 seconds
+        setInterval(() => {
+            if (externalDeployApiKey) {
+                fetchExternalDeployments();
+            }
+        }, 30000);
+
+        // Load external deployments on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchExternalDeployments();
+        });
     </script>
 </body>
 </html>
