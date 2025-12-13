@@ -5,28 +5,39 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Server Monitoring Dashboard</title>
     <style>
-        /* Human-centered, handcrafted styles */
+        /* Human-centered, organic design system */
         :root{
-            --bg: #f6f8fa;
+            --bg: #f8fafb;
             --card: #ffffff;
-            --muted: #6b7280;
-            --accent: #4f46e5; /* indigo */
-            --danger: #e11d48; /* rose */
-            --success: #059669; /* emerald */
-            --border: #e6e7eb;
-            --glass: rgba(255,255,255,0.6);
+            --muted: #64748b;
+            --text: #1e293b;
+            --text-light: #475569;
+            --accent: #6366f1;
+            --accent-hover: #4f46e5;
+            --danger: #ef4444;
+            --danger-hover: #dc2626;
+            --success: #10b981;
+            --success-hover: #059669;
+            --warning: #f59e0b;
+            --border: rgba(148, 163, 184, 0.15);
+            --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.04);
+            --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.06), 0 2px 4px rgba(15, 23, 42, 0.03);
+            --shadow-lg: 0 8px 32px rgba(15, 23, 42, 0.08), 0 2px 8px rgba(15, 23, 42, 0.04);
         }
-        *{box-sizing:border-box}
-        html,body{height: auto;}
+        *{box-sizing:border-box;margin:0;padding:0;}
+        html,body{height:auto;}
         body{
-            margin:0;
-            font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
-            background:linear-gradient(180deg,#eef2ff 0%, #f8fafc 100%);
-            color:#0f172a;
-            padding:24px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(160deg, #f1f5f9 0%, #e2e8f0 50%, #cbd5e1 100%);
+            color: var(--text);
+            padding: 24px;
+            line-height: 1.6;
+            letter-spacing: -0.011em;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
         .wrap{
-            max-width:1100px;
+            max-width:1200px;
             margin:0 auto;
         }
         header.app-header{
@@ -34,107 +45,605 @@
             align-items:center;
             justify-content:space-between;
             gap:16px;
-            margin-bottom:18px;
+            margin-bottom:20px;
+            flex-wrap:wrap;
         }
         header h1{
-            font-size:1.5rem;
-            color:var(--accent);
+            font-size:1.625rem;
+            font-weight:700;
+            color:var(--text);
             margin:0;
-            display:flex;
-            align-items:center;
-            gap:10px;
+            letter-spacing:-0.025em;
+            line-height:1.2;
         }
-        header .meta small{color:var(--muted)}
+        header .meta{
+            margin-top:2px;
+        }
+        header .meta small{
+            color:var(--muted);
+            font-size:0.875rem;
+            font-weight:400;
+            letter-spacing:-0.006em;
+        }
+
+        /* Guest mode banner */
+        .guest-banner {
+            background: linear-gradient(to bottom right, #fffbeb, #fef3c7);
+            border: 1px solid rgba(251, 191, 36, 0.2);
+            border-radius: 16px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: var(--shadow-md);
+        }
+        .guest-banner-content {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+        }
+        .guest-banner-icon {
+            width: 20px;
+            height: 20px;
+            stroke: #d97706;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+        .guest-banner-text {
+            flex: 1;
+        }
+        .guest-banner-title {
+            font-weight: 600;
+            font-size: 0.9375rem;
+            color: #78350f;
+            margin-bottom: 3px;
+            letter-spacing: -0.014em;
+        }
+        .guest-banner-description {
+            font-size: 0.8125rem;
+            color: #92400e;
+            line-height: 1.5;
+            letter-spacing: -0.006em;
+        }
+        .logout-btn {
+            background: white;
+            border: 1.5px solid rgba(217, 119, 6, 0.3);
+            color: #92400e;
+            padding: 8px 16px;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            text-decoration: none;
+            display: inline-block;
+            letter-spacing: -0.006em;
+        }
+        .logout-btn:hover {
+            background: #fef3c7;
+            border-color: rgba(217, 119, 6, 0.4);
+            box-shadow: 0 2px 8px rgba(245, 158, 11, 0.12);
+        }
+
+        /* Authenticated mode banner */
+        .auth-banner {
+            background: linear-gradient(to bottom right, #ecfdf5, #d1fae5);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            border-radius: 16px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: var(--shadow-md);
+        }
+        .auth-banner-content {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+        }
+        .auth-banner-icon {
+            width: 20px;
+            height: 20px;
+            stroke: #059669;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+        .auth-banner-text {
+            flex: 1;
+        }
+        .auth-banner-title {
+            font-weight: 600;
+            font-size: 0.9375rem;
+            color: #065f46;
+            margin-bottom: 3px;
+            letter-spacing: -0.014em;
+        }
+        .auth-banner-description {
+            font-size: 0.8125rem;
+            color: #047857;
+            line-height: 1.5;
+            letter-spacing: -0.006em;
+        }
 
         main.grid{
             display:grid;
-            grid-template-columns: 1fr 420px;
+            grid-template-columns: 1fr 440px;
             gap:20px;
         }
         @media (max-width:900px){main.grid{grid-template-columns:1fr}}
 
         .card{
-            background:var(--card);
-            border-radius:10px;
-            padding:18px;
-            border:1px solid var(--border);
-            box-shadow: 0 6px 20px rgba(10,10,20,0.04);
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius:16px;
+            padding:20px;
+            border:1px solid rgba(255, 255, 255, 0.4);
+            box-shadow: var(--shadow-lg);
         }
-        .panel-row{display:flex;gap:12px;align-items:center}
+        .panel-row{display:flex;gap:14px;align-items:center}
         .panel-col{flex:1}
-        .small{font-size:0.84rem;color:var(--muted)}
+        .small{font-size:0.8125rem;color:var(--muted);font-weight:400;letter-spacing:-0.006em;}
         .databox{display:flex;gap:12px;align-items:center}
-        .badge{padding:6px 10px;border-radius:999px;font-weight:600;font-size:0.86rem}
-        .badge.success{background:rgba(5,150,105,0.08);color:var(--success);border:1px solid rgba(5,150,105,0.12)}
-        .badge.danger{background:rgba(225,29,72,0.06);color:var(--danger);border:1px solid rgba(225,29,72,0.1)}
-        .badge.neutral{background:rgba(71,85,105,0.04);color:var(--muted);border:1px solid rgba(71,85,105,0.03)}
+        .badge{
+            padding:6px 12px;
+            border-radius:8px;
+            font-weight:600;
+            font-size:0.8125rem;
+            display:inline-flex;
+            align-items:center;
+            gap:6px;
+            letter-spacing:-0.006em;
+        }
+        .badge svg{
+            width:12px;
+            height:12px;
+            fill:currentColor;
+        }
+        .badge.success{
+            background:rgba(16,185,129,0.08);
+            color:#059669;
+            border:1px solid rgba(16,185,129,0.15);
+        }
+        .badge.danger{
+            background:rgba(239,68,68,0.08);
+            color:#dc2626;
+            border:1px solid rgba(239,68,68,0.15);
+        }
+        .badge.neutral{
+            background:rgba(100,116,139,0.06);
+            color:var(--muted);
+            border:1px solid rgba(100,116,139,0.12);
+        }
 
         /* Server grid */
-        .server-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
-        .server-card{padding:12px;border-radius:8px;border:1px solid var(--border);display:flex;flex-direction:column;gap:6px}
-        .server-name{font-weight:600;color:#0f172a}
-        .server-reason{font-size:0.85rem;color:var(--muted)}
+        .server-grid{
+            display:grid;
+            grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+            gap:14px;
+        }
+        .server-card{
+            padding:14px 16px;
+            border-radius:12px;
+            border:1px solid var(--border);
+            background:linear-gradient(to bottom,#ffffff,#fafbfc);
+            display:flex;
+            flex-direction:column;
+            gap:8px;
+            box-shadow:var(--shadow-sm);
+            transition:all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .server-card:hover{
+            box-shadow:var(--shadow-md);
+            transform:translateY(-1px);
+        }
+        .server-name{
+            font-weight:600;
+            font-size:0.9375rem;
+            color:var(--text);
+            letter-spacing:-0.014em;
+        }
+        .server-reason{
+            font-size:0.8125rem;
+            color:var(--muted);
+            letter-spacing:-0.006em;
+        }
 
         /* Tables */
-        table{width:100%;border-collapse:collapse;font-size:0.95rem}
-        thead th{background:transparent;color:var(--muted);font-weight:700;padding:12px 10px;text-align:left;border-bottom:1px solid var(--border)}
-        tbody td{padding:12px 10px;border-bottom:1px solid var(--border);vertical-align:top}
-        tbody tr:hover td{background:linear-gradient(90deg,#ffffff 0%,#f6f8fa 100%);}
+        table{
+            width:100%;
+            border-collapse:separate;
+            border-spacing:0;
+            font-size:0.875rem;
+        }
+        thead th{
+            background:transparent;
+            color:var(--muted);
+            font-weight:600;
+            font-size:0.8125rem;
+            padding:12px 12px;
+            text-align:left;
+            border-bottom:1px solid var(--border);
+            letter-spacing:0.025em;
+            text-transform:uppercase;
+        }
+        tbody td{
+            padding:14px 12px;
+            border-bottom:1px solid var(--border);
+            vertical-align:top;
+            color:var(--text-light);
+            line-height:1.5;
+        }
+        tbody tr{
+            transition:background 0.15s ease;
+        }
+        tbody tr:hover{
+            background:linear-gradient(90deg,rgba(248,250,252,0.8) 0%,rgba(241,245,249,0.6) 100%);
+        }
 
-        /* Delete logs button */
-        .actions{display:flex;align-items:center;justify-content:flex-end;gap:8px}
-        .btn{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;background:var(--accent);color:white;border:none;cursor:pointer}
-        .btn.ghost{background:transparent;color:var(--accent);border:1px solid rgba(79,70,229,0.12)}
-        .btn.danger{background:var(--danger)}
-        input[type="password"]{padding:8px 10px;border-radius:6px;border:1px solid var(--border);width:160px}
+        /* Actions and buttons */
+        .actions{
+            display:flex;
+            align-items:center;
+            justify-content:flex-end;
+            gap:10px;
+        }
+        .btn{
+            display:inline-flex;
+            align-items:center;
+            gap:8px;
+            padding:9px 16px;
+            border-radius:10px;
+            background:var(--accent);
+            color:white;
+            border:none;
+            cursor:pointer;
+            font-weight:600;
+            font-size:0.875rem;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow:0 2px 8px rgba(99,102,241,0.25);
+            letter-spacing:-0.006em;
+        }
+        .btn:hover:not(:disabled){
+            background:var(--accent-hover);
+            box-shadow:0 4px 12px rgba(99,102,241,0.35);
+            transform:translateY(-1px);
+        }
+        .btn svg{
+            width:16px;
+            height:16px;
+            stroke:currentColor;
+            fill:none;
+            stroke-width:2;
+            stroke-linecap:round;
+            stroke-linejoin:round;
+        }
+        .btn.ghost{
+            background:transparent;
+            color:var(--accent);
+            border:1.5px solid rgba(99,102,241,0.2);
+            box-shadow:none;
+        }
+        .btn.ghost:hover:not(:disabled){
+            background:rgba(99,102,241,0.06);
+            border-color:rgba(99,102,241,0.3);
+            box-shadow:0 2px 8px rgba(99,102,241,0.12);
+        }
+        .btn.danger{
+            background:var(--danger);
+            box-shadow:0 2px 8px rgba(239,68,68,0.25);
+        }
+        .btn.danger:hover:not(:disabled){
+            background:var(--danger-hover);
+            box-shadow:0 4px 12px rgba(239,68,68,0.35);
+        }
+        .btn:disabled{
+            background:linear-gradient(135deg,#cbd5e1 0%,#94a3b8 100%);
+            cursor:not-allowed;
+            box-shadow:none;
+            transform:none;
+        }
+        input[type="password"],
+        input[type="text"],
+        input[type="url"]{
+            padding:9px 12px;
+            border-radius:10px;
+            border:1.5px solid var(--border);
+            background:white;
+            font-size:0.875rem;
+            color:var(--text);
+            transition:all 0.2s ease;
+            font-family:inherit;
+        }
+        input[type="password"]:focus,
+        input[type="text"]:focus,
+        input[type="url"]:focus{
+            outline:none;
+            border-color:rgba(99,102,241,0.4);
+            box-shadow:0 0 0 3px rgba(99,102,241,0.1);
+        }
 
         /* Empty states */
-        .empty-state{padding:28px;text-align:center;color:var(--muted)}
+        .empty-state{
+            padding:32px;
+            text-align:center;
+            color:var(--muted);
+            font-size:0.875rem;
+            line-height:1.5;
+            letter-spacing:-0.006em;
+        }
 
         /* Modal styles */
-        .modal{display:none;position:fixed;z-index:100;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.5);align-items:center;justify-content:center}
+        .modal{
+            display:none;
+            position:fixed;
+            z-index:100;
+            left:0;
+            top:0;
+            width:100%;
+            height:100%;
+            background:rgba(15,23,42,0.6);
+            backdrop-filter:blur(4px);
+            -webkit-backdrop-filter:blur(4px);
+            align-items:center;
+            justify-content:center;
+            animation:fadeInBackdrop 0.2s ease;
+        }
         .modal.show{display:flex}
-        .modal-content{background:white;border-radius:12px;padding:24px;max-width:480px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
-        .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
-        .modal-header h3{margin:0;color:var(--accent)}
-        .modal-close{background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--muted);padding:0;width:32px;height:32px}
-        .modal-close:hover{color:var(--danger)}
-        .form-group{margin-bottom:16px}
-        .form-group label{display:block;margin-bottom:6px;font-weight:600;color:#334155}
-        .form-group input{width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:0.95rem}
-        .form-group input:focus{outline:none;border-color:var(--accent)}
-        .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
-        .btn.secondary{background:#e5e7eb;color:#374151}
-        .btn.secondary:hover{background:#d1d5db}
-        .add-btn{background:var(--success);margin-left:8px}
-        .add-btn:hover{background:#047857}
-        .remove-btn{background:var(--danger);padding:6px 10px;font-size:0.85rem}
-        .remove-btn:hover{background:#be123c}
+        @keyframes fadeInBackdrop{
+            from{opacity:0;}
+            to{opacity:1;}
+        }
+        .modal-content{
+            background:white;
+            border-radius:20px;
+            padding:28px;
+            max-width:480px;
+            width:90%;
+            box-shadow:var(--shadow-lg),0 0 0 1px rgba(0,0,0,0.05);
+            animation:slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        @keyframes slideUp{
+            from{opacity:0;transform:translateY(20px);}
+            to{opacity:1;transform:translateY(0);}
+        }
+        .modal-header{
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            margin-bottom:20px;
+        }
+        .modal-header h3{
+            margin:0;
+            color:var(--text);
+            font-size:1.125rem;
+            font-weight:600;
+            letter-spacing:-0.017em;
+        }
+        .modal-close{
+            background:none;
+            border:none;
+            cursor:pointer;
+            color:var(--muted);
+            padding:4px;
+            width:32px;
+            height:32px;
+            border-radius:8px;
+            transition:all 0.15s ease;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+        }
+        .modal-close:hover{
+            color:var(--danger);
+            background:rgba(239,68,68,0.08);
+        }
+        .form-group{
+            margin-bottom:18px;
+        }
+        .form-group label{
+            display:block;
+            margin-bottom:8px;
+            font-weight:600;
+            font-size:0.875rem;
+            color:var(--text);
+            letter-spacing:-0.006em;
+        }
+        .form-group input{
+            width:100%;
+        }
+        .modal-actions{
+            display:flex;
+            gap:10px;
+            justify-content:flex-end;
+            margin-top:24px;
+        }
+        .btn.secondary{
+            background:#f1f5f9;
+            color:var(--text-light);
+            box-shadow:none;
+        }
+        .btn.secondary:hover:not(:disabled){
+            background:#e2e8f0;
+            box-shadow:0 2px 8px rgba(148,163,184,0.15);
+        }
+        .add-btn{
+            background:var(--success);
+            box-shadow:0 2px 8px rgba(16,185,129,0.25);
+            margin-left:8px;
+        }
+        .add-btn:hover:not(:disabled){
+            background:var(--success-hover);
+            box-shadow:0 4px 12px rgba(16,185,129,0.35);
+        }
+        .remove-btn{
+            background:var(--danger);
+            padding:6px 12px;
+            font-size:0.8125rem;
+            box-shadow:0 2px 6px rgba(239,68,68,0.2);
+        }
+        .remove-btn:hover:not(:disabled){
+            background:var(--danger-hover);
+            box-shadow:0 4px 10px rgba(239,68,68,0.3);
+        }
 
         /* External Deployment Monitoring Styles */
-        .external-deploy-card{padding:14px;border-radius:8px;border:1px solid var(--border);margin-bottom:10px;background:linear-gradient(135deg,#ffffff 0%,#f9fafb 100%)}
-        .deploy-header{display:flex;justify-content:space-between;align-items:start;margin-bottom:10px}
-        .deploy-title{font-weight:600;color:#0f172a;font-size:0.95rem}
-        .deploy-meta{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
-        .deploy-info{font-size:0.88rem;color:var(--muted)}
-        .deploy-commit{font-family:monospace;font-size:0.85rem;color:#334155;background:#f1f5f9;padding:4px 8px;border-radius:4px;display:inline-block;margin-top:6px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-        .external-link{display:inline-flex;align-items:center;gap:4px;color:var(--accent);text-decoration:none;font-size:0.88rem;padding:4px 8px;border-radius:4px;border:1px solid rgba(79,70,229,0.12);background:rgba(79,70,229,0.02)}
-        .external-link:hover{background:rgba(79,70,229,0.08)}
-        .refresh-indicator{font-size:0.8rem;color:var(--muted);font-style:italic}
+        .external-deploy-card{
+            padding:16px;
+            border-radius:12px;
+            border:1px solid var(--border);
+            margin-bottom:12px;
+            background:linear-gradient(to bottom,#ffffff,#fafbfc);
+            box-shadow:var(--shadow-sm);
+            transition:all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .external-deploy-card:hover{
+            box-shadow:var(--shadow-md);
+            transform:translateY(-1px);
+        }
+        .deploy-header{
+            display:flex;
+            justify-content:space-between;
+            align-items:start;
+            margin-bottom:10px;
+        }
+        .deploy-title{
+            font-weight:600;
+            color:var(--text);
+            font-size:0.9375rem;
+            letter-spacing:-0.014em;
+        }
+        .deploy-meta{
+            display:flex;
+            gap:10px;
+            flex-wrap:wrap;
+            align-items:center;
+            margin-bottom:10px;
+        }
+        .deploy-info{
+            font-size:0.8125rem;
+            color:var(--muted);
+            font-family:'SF Mono','Monaco','Consolas',monospace;
+            letter-spacing:-0.006em;
+        }
+        .deploy-commit{
+            font-family:'SF Mono','Monaco','Consolas',monospace;
+            font-size:0.8125rem;
+            color:var(--text-light);
+            background:rgba(241,245,249,0.8);
+            padding:6px 10px;
+            border-radius:8px;
+            display:inline-block;
+            margin-top:8px;
+            max-width:100%;
+            overflow:hidden;
+            text-overflow:ellipsis;
+            white-space:nowrap;
+            border:1px solid var(--border);
+        }
+        .external-link{
+            display:inline-flex;
+            align-items:center;
+            gap:6px;
+            color:var(--accent);
+            text-decoration:none;
+            font-size:0.8125rem;
+            font-weight:500;
+            padding:6px 12px;
+            border-radius:8px;
+            border:1.5px solid rgba(99,102,241,0.2);
+            background:rgba(99,102,241,0.04);
+            transition:all 0.2s ease;
+            letter-spacing:-0.006em;
+        }
+        .external-link:hover{
+            background:rgba(99,102,241,0.1);
+            border-color:rgba(99,102,241,0.3);
+            box-shadow:0 2px 8px rgba(99,102,241,0.15);
+        }
+        .external-link svg{
+            width:14px;
+            height:14px;
+            stroke:currentColor;
+            fill:none;
+            stroke-width:2;
+            stroke-linecap:round;
+            stroke-linejoin:round;
+        }
+        .refresh-indicator{
+            font-size:0.75rem;
+            color:var(--muted);
+            font-style:italic;
+            letter-spacing:-0.006em;
+        }
 
-        footer{margin-top:18px;text-align:center;color:var(--muted);font-size:0.9rem}
+        h2{
+            font-size:1rem;
+            font-weight:600;
+            color:var(--text);
+            letter-spacing:-0.017em;
+            margin:0;
+        }
+
+        hr{
+            margin:16px 0;
+            border:none;
+            border-top:1px solid var(--border);
+        }
+
+        footer{
+            margin-top:20px;
+            text-align:center;
+            color:var(--muted);
+            font-size:0.8125rem;
+            letter-spacing:-0.006em;
+        }
     </style>
 </head>
 <body>
     <div class="wrap">
-        <header class="app-header">
-            <h1>DashBoard</h1>
-            <div class="meta">
-                <small>Monitoring your servers and deployments</small>
+        <% if (isGuest) { %>
+            <div class="guest-banner">
+                <div class="guest-banner-content">
+                    <svg class="guest-banner-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    <div class="guest-banner-text">
+                        <div class="guest-banner-title">Guest Mode</div>
+                        <div class="guest-banner-description">You're viewing sample data. Upload your .env file for full access.</div>
+                    </div>
+                </div>
+                <a href="/logout" class="logout-btn">Upload .env</a>
             </div>
-            <div style="display:flex;gap:8px">
-                <button class="btn add-btn" onclick="openModal('serverModal')">+ Add Server</button>
-                <button class="btn add-btn" onclick="openModal('deployModal')">+ Deploy</button>
+        <% } else { %>
+            <div class="auth-banner">
+                <div class="auth-banner-content">
+                    <svg class="auth-banner-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    <div class="auth-banner-text">
+                        <div class="auth-banner-title">Authenticated Session</div>
+                        <div class="auth-banner-description">Connected with your credentials. Session expires in 30 minutes.</div>
+                    </div>
+                </div>
+                <a href="/logout" class="logout-btn" style="border-color: rgba(16,185,129,0.3); color: #065f46;">Logout</a>
+            </div>
+        <% } %>
+
+        <header class="app-header">
+            <div>
+                <h1>Dashboard</h1>
+                <div class="meta">
+                    <small>Monitoring your servers and deployments</small>
+                </div>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                <button class="btn add-btn" onclick="openModal('serverModal')" <%= isGuest ? 'disabled title="Not available in guest mode"' : '' %>>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Add Server
+                </button>
+                <button class="btn add-btn" onclick="openModal('deployModal')" <%= isGuest ? 'disabled title="Not available in guest mode"' : '' %>>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+                    Deploy
+                </button>
             </div>
         </header>
 
@@ -151,19 +660,28 @@
                     </div>
                     <div style="text-align:right" class="panel-col">
                         <div class="small">Status</div>
-                        <div class="badge <%= urlStatus==='Up' ? 'success' : (urlStatus==='Down' ? 'danger' : 'neutral') %>"><%= urlStatus || 'Unknown' %></div>
+                        <div class="badge <%= urlStatus==='Up' ? 'success' : (urlStatus==='Down' ? 'danger' : 'neutral') %>">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>
+                            <%= urlStatus || 'Unknown' %>
+                        </div>
                     </div>
                 </div>
-                <hr style="margin:12px 0;border:none;border-top:1px solid black;">
-                <div class="panel-row" style="margin-bottom:8px">
+                <hr style="margin:16px 0;border:none;border-top:1px solid var(--border);">
+                <div class="panel-row" style="margin-bottom:10px">
                     <div class="panel-col">
                         <div class="small">CI/CD Pipeline</div>
-                        <div class="badge <%= pipelineStatus==='success' ? 'success' : 'danger' %>"><%= pipelineStatus %></div>
+                        <div class="badge <%= pipelineStatus==='success' ? 'success' : 'danger' %>">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>
+                            <%= pipelineStatus %>
+                        </div>
                     </div>
                     <div class="panel-col actions" style="justify-content:flex-end">
-                        <form method="get" action="/dashboard" style="display:flex;gap:8px;align-items:center">
-                            <input aria-label="check-url" type="text" id="url" name="url" placeholder="https://example.com" value="<%= url !== 'N/A' ? url : '' %>" style="padding:8px 10px;border-radius:6px;border:1px solid var(--border);width:280px"/>
-                            <button class="btn ghost" type="submit">Check</button>
+                        <form method="get" action="/dashboard" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                            <input aria-label="check-url" type="text" id="url" name="url" placeholder="https://example.com" value="<%= url !== 'N/A' ? url : '' %>" style="width:280px"/>
+                            <button class="btn ghost" type="submit">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                                Check
+                            </button>
                         </form>
                     </div>
                 </div>
@@ -175,54 +693,73 @@
                                 <div class="server-card">
                                     <div style="display:flex;justify-content:space-between;align-items:start">
                                         <div class="server-name"><%= server %></div>
-                                        <button class="btn remove-btn" onclick="removeServer('<%= server %>')">✕</button>
+                                        <% if (!isGuest) { %>
+                                            <button class="btn remove-btn" onclick="removeServer('<%= server %>')">
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                            </button>
+                                        <% } %>
                                     </div>
-                                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                                        <div class="badge <%= status === 'Up' ? 'success' : 'danger' %>"><%= status %></div>
+                                    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                                        <div class="badge <%= status === 'Up' ? 'success' : 'danger' %>">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>
+                                            <%= status %>
+                                        </div>
                                         <div class="server-reason"><%= reason || 'No details' %></div>
                                     </div>
                                 </div>
                             <% }); %>
                         </div>
                     <% } else { %>
-                        <div class="empty-state">No servers configured. Add servers using the button above</div>
+                        <div class="empty-state">No servers configured. <%= isGuest ? 'Upload your .env to add servers.' : 'Add servers using the button above.' %></div>
                     <% } %>
                     <hr style="margin:18px 0;border:none;border-top:1px solid var(--border)">
-                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:12px;">
                         <div>
-                            <div style="font-weight:600">External Deployments (Render)</div>
-                            <div class="small">Live deployment status from webhooks</div>
+                            <div style="font-weight:600;font-size:0.9375rem;color:var(--text);margin-bottom:2px;letter-spacing:-0.014em;">External Deployments (Render)</div>
+                            <div class="small">Live deployment status from Render API</div>
                         </div>
-                        <button class="btn ghost" onclick="refreshExternalDeployments()" style="padding:6px 10px;font-size:0.85rem">↻ Refresh</button>
+                        <button class="btn ghost" onclick="refreshExternalDeployments()" style="padding:8px 14px;font-size:0.8125rem" <%= isGuest ? 'disabled' : '' %>>
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                            Refresh
+                        </button>
                     </div>
                     <div id="externalDeploymentsContainer">
-                        <div class="empty-state">Loading external deployments...</div>
+                        <% if (isGuest) { %>
+                            <div class="empty-state">External deployments not available in guest mode</div>
+                        <% } else { %>
+                            <div class="empty-state">Loading external deployments...</div>
+                        <% } %>
                     </div>
                     <div class="refresh-indicator" id="lastRefreshTime" style="margin-top:8px;text-align:right"></div>
                 </div>
 
-                <div class="card" style="margin-bottom:18px">
-                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-                        <div>
-                            <div style="font-weight:600">Activity Logs</div>
-                            <div class="small">Last check snapshots</div>
-                        </div>
-                        <div class="actions">
-                            <form id="deleteLogsForm" onsubmit="event.preventDefault(); handleDeleteLogs();" style="display:flex;gap:8px;align-items:center">
-                                <input type="password" id="apiKeyInput" placeholder="API key" aria-label="API key" required/>
-                                <button class="btn danger" type="submit" aria-label="Delete logs">Clear Logs</button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
+               
                 
                 
             </section>
 
             <aside>
-                <!-- External Deployment Monitoring (Render) -->
+                <!-- Activity Logs -->
                 <div class="card" style="margin-bottom:18px">
-                    
+                     <div class="card" style="margin-bottom:20px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:12px;flex-wrap:wrap;">
+                        <div>
+                            <div style="font-weight:600;font-size:0.9375rem;color:var(--text);margin-bottom:2px;letter-spacing:-0.014em;">Activity Logs</div>
+                            <div class="small">Last check snapshots</div>
+                        </div>
+                        <% if (!isGuest) { %>
+                            <div class="actions">
+                                <form id="deleteLogsForm" onsubmit="event.preventDefault(); handleDeleteLogs();" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                                    <input type="password" id="apiKeyInput" placeholder="API key" aria-label="API key" required style="width:140px;"/>
+                                    <button class="btn danger" type="submit" aria-label="Delete logs">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                                        Clear Logs
+                                    </button>
+                                </form>
+                            </div>
+                        <% } %>
+                    </div>
+                </div>
                     <% if (logs && logs.length > 0) { %>
                         <table>
                             <thead>
@@ -242,10 +779,11 @@
                     <% } %>
                 </div>
 
+                <!-- Deployment History -->
                 <div class="card">
-                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
                         <div>
-                            <div style="font-weight:600">Deployment History</div>
+                            <div style="font-weight:600;font-size:0.9375rem;color:var(--text);margin-bottom:2px;letter-spacing:-0.014em;">Deployment History</div>
                             <div class="small">Recent deploys</div>
                         </div>
                     </div>
@@ -257,9 +795,14 @@
                             <tbody>
                                 <% deployments.forEach(dep => { %>
                                     <tr>
-                                        <td><%= dep.version %></td>
-                                        <td><div class="badge <%= dep.status === 'success' ? 'success' : 'danger' %>"><%= dep.status %></div></td>
-                                        <td><%= new Date(dep.timestamp).toLocaleString() %></td>
+                                        <td style="font-weight:500;"><%= dep.version %></td>
+                                        <td>
+                                            <div class="badge <%= dep.status === 'success' ? 'success' : 'danger' %>">
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>
+                                                <%= dep.status %>
+                                            </div>
+                                        </td>
+                                        <td style="font-size:0.8125rem;color:var(--muted);"><%= new Date(dep.timestamp).toLocaleString() %></td>
                                     </tr>
                                 <% }); %>
                             </tbody>
@@ -325,8 +868,14 @@
     </div>
 
     <script>
+        const isGuest = <%= isGuest %>;
+
         // Modal functions
         function openModal(modalId) {
+            if (isGuest) {
+                alert('This feature is not available in guest mode. Please upload your .env file for full access.');
+                return;
+            }
             document.getElementById(modalId).classList.add('show');
         }
         
@@ -380,6 +929,11 @@
 
         // Remove Server
         async function removeServer(serverName) {
+            if (isGuest) {
+                alert('Cannot remove servers in guest mode');
+                return;
+            }
+
             const apiKey = prompt('Enter API key to confirm server removal:');
             if (!apiKey) return;
 
@@ -461,22 +1015,13 @@
         }
 
         // External Deployments Functions
-        let externalDeployApiKey = null;
-
         async function fetchExternalDeployments() {
-            if (!externalDeployApiKey) {
-                externalDeployApiKey = prompt('Enter API key to view Render deployments:');
-                if (!externalDeployApiKey) {
-                    document.getElementById('externalDeploymentsContainer').innerHTML = 
-                        '<div class="empty-state">API key required to view deployments</div>';
-                    return;
-                }
+            if (isGuest) {
+                return;
             }
 
             try {
-                const res = await fetch('/render-deployments', {
-                    headers: { 'x-api-key': externalDeployApiKey }
-                });
+                const res = await fetch('/render-deployments');
 
                 if (!res.ok) {
                     throw new Error('Failed to fetch Render deployments');
@@ -488,8 +1033,7 @@
             } catch (err) {
                 console.error('Error fetching Render deployments:', err);
                 document.getElementById('externalDeploymentsContainer').innerHTML = 
-                    '<div class="empty-state">Error loading Render deployments. Check API key or Render API configuration.</div>';
-                externalDeployApiKey = null; // Reset API key on error
+                    '<div class="empty-state">Error loading Render deployments. Check RENDER_API_KEY in your .env file.</div>';
             }
         }
 
@@ -541,14 +1085,6 @@
             return 'neutral';
         }
 
-        function getDeploymentStatusClass(status) {
-            if (!status) return 'neutral';
-            const statusLower = status.toLowerCase();
-            if (statusLower === 'live' || statusLower === 'success') return 'success';
-            if (statusLower === 'failed' || statusLower === 'failure') return 'danger';
-            return 'neutral';
-        }
-
         function formatTimestamp(timestamp) {
             const date = new Date(timestamp);
             const now = new Date();
@@ -581,22 +1117,26 @@
         }
 
         function refreshExternalDeployments() {
+            if (isGuest) {
+                alert('External deployments not available in guest mode');
+                return;
+            }
             document.getElementById('externalDeploymentsContainer').innerHTML = 
                 '<div class="empty-state">Refreshing...</div>';
             fetchExternalDeployments();
         }
 
-        // Auto-refresh external deployments every 30 seconds
-        setInterval(() => {
-            if (externalDeployApiKey) {
+        // Auto-refresh external deployments every 30 seconds (only if not guest)
+        if (!isGuest) {
+            setInterval(() => {
                 fetchExternalDeployments();
-            }
-        }, 30000);
+            }, 30000);
 
-        // Load external deployments on page load
-        document.addEventListener('DOMContentLoaded', () => {
-            fetchExternalDeployments();
-        });
+            // Load external deployments on page load
+            document.addEventListener('DOMContentLoaded', () => {
+                fetchExternalDeployments();
+            });
+        }
     </script>
 </body>
 </html>
