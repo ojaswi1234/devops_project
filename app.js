@@ -5,6 +5,8 @@ const mongoose = require("mongoose");
 const session = require("express-session");
 const multer = require("multer");
 const path = require("path");
+const crypto = require("crypto");
+const dotenv = require("dotenv");
 
 const app = express();
 
@@ -16,103 +18,142 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('stylesheets'));
 
-// Session configuration
-app.use(session({
-    secret: 'your-secret-key-change-this-in-production',
+// Generate secure session secret from environment or create random one
+const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+
+if (SESSION_SECRET.length < 32) {
+    console.warn("⚠️  WARNING: SESSION_SECRET should be at least 32 characters for production!");
+}
+
+// Session configuration with optional MongoStore for production
+let sessionConfig = {
+    secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: { 
         maxAge: 30 * 60 * 1000, // 30 minutes
         httpOnly: true,
-        secure: false // Set to true if using HTTPS
+        secure: process.env.NODE_ENV === 'production' // Auto-enable in production
     }
-}));
+};
 
-// Guest mode default configuration
+// Try to use MongoStore if SESSION_MONGO_URI is provided
+if (process.env.SESSION_MONGO_URI) {
+    try {
+        const MongoStore = require("connect-mongo");
+        sessionConfig.store = MongoStore.create({
+            mongoUrl: process.env.SESSION_MONGO_URI,
+            touchAfter: 24 * 3600 // Lazy session update
+        });
+        console.log("✓ Using MongoDB session store");
+    } catch (err) {
+        console.warn("⚠️  MongoDB session store unavailable, using MemoryStore (not for production!)");
+        console.warn("   Error:", err.message);
+    }
+} else {
+    console.warn("⚠️  Using MemoryStore for sessions (not suitable for production)");
+    console.warn("   Set SESSION_MONGO_URI environment variable to use persistent session storage");
+}
+
+app.use(session(sessionConfig));
+
+// Guest mode default configuration - fully in-memory, no database required
 const GUEST_CONFIG = {
-    MONGO_URI: "mongodb://localhost:27017/devops_guest",
     API_KEY: "guest-api-key-12345",
     RENDER_API_KEY: "",
     PORT: 3000
 };
 
-// Sample guest data (pre-populated)
-const GUEST_SERVERS = [
-    { name: "Demo Server 1", url: "https://httpstat.us/200", status: "Up" },
-    { name: "Demo Server 2", url: "https://httpstat.us/500", status: "Down" }
-];
+// In-memory storage for guest mode (per session)
+const guestStorage = new Map();
 
-const GUEST_LOGS = [
-    {
-        timestamp: new Date(Date.now() - 60000),
-        statuses: {
-            "Demo Server 1": { status: "Up", reason: "OK 200" },
-            "Demo Server 2": { status: "Down", reason: "HTTP 500" }
-        }
+function getGuestData(sessionId) {
+    if (!guestStorage.has(sessionId)) {
+        guestStorage.set(sessionId, {
+            servers: [
+                { name: "Demo Server 1", url: "https://httpstat.us/200", status: "Up" },
+                { name: "Demo Server 2", url: "https://httpstat.us/500", status: "Down" }
+            ],
+            logs: [
+                {
+                    timestamp: new Date(Date.now() - 60000),
+                    statuses: {
+                        "Demo Server 1": { status: "Up", reason: "OK 200" },
+                        "Demo Server 2": { status: "Down", reason: "HTTP 500" }
+                    }
+                }
+            ],
+            deployments: [
+                {
+                    version: "v1.0.0",
+                    status: "success",
+                    timestamp: new Date(Date.now() - 120000),
+                    provider: "manual",
+                    project: "Demo Project",
+                    environment: "production"
+                }
+            ]
+        });
     }
-];
-
-const GUEST_DEPLOYMENTS = [
-    {
-        version: "v1.0.0",
-        status: "success",
-        timestamp: new Date(Date.now() - 120000),
-        provider: "manual",
-        project: "Demo Project",
-        environment: "production"
-    }
-];
-
-// Parse .env content into key-value pairs
-function parseEnvContent(content) {
-    const config = {};
-    const lines = content.toString().split('\n');
-    
-    for (let line of lines) {
-        line = line.trim();
-        
-        // Skip empty lines and comments
-        if (!line || line.startsWith('#')) continue;
-        
-        const separatorIndex = line.indexOf('=');
-        if (separatorIndex === -1) continue;
-        
-        const key = line.substring(0, separatorIndex).trim();
-        let value = line.substring(separatorIndex + 1).trim();
-        
-        // Remove quotes if present
-        if ((value.startsWith('"') && value.endsWith('"')) || 
-            (value.startsWith("'") && value.endsWith("'"))) {
-            value = value.slice(1, -1);
-        }
-        
-        config[key] = value;
-    }
-    
-    return config;
+    return guestStorage.get(sessionId);
 }
 
-// MongoDB Connection Manager
-let mongoConnection = null;
+// Parse .env content using battle-tested dotenv parser
+// Handles multiline values, special characters, quotes, and edge cases properly
+function parseEnvContent(buffer) {
+    return dotenv.parse(buffer);
+}
 
-async function connectToMongoDB(uri) {
-    try {
-        if (mongoConnection) {
-            await mongoConnection.close();
+// MongoDB Connection Pool Manager - Per Session Isolation
+// This fixes the critical multi-tenancy flaw by creating separate connections per session
+const connectionPool = new Map();
+
+async function getConnection(sessionId, mongoUri) {
+    if (!sessionId || !mongoUri) {
+        throw new Error("Session ID and MongoDB URI are required");
+    }
+    
+    const connectionKey = `${sessionId}:${mongoUri}`;
+    
+    if (connectionPool.has(connectionKey)) {
+        const conn = connectionPool.get(connectionKey);
+        if (conn.readyState === 1) { // Connected
+            return conn;
+        } else {
+            // Connection is dead, remove it
+            connectionPool.delete(connectionKey);
         }
-        mongoConnection = await mongoose.connect(uri, { 
-            useNewUrlParser: true, 
-            useUnifiedTopology: true 
+    }
+    
+    try {
+        // Create a NEW connection instance for this session
+        const conn = mongoose.createConnection(mongoUri, {
+            useNewUrlParser: true,
+            useUnifiedTopology: true,
+            maxPoolSize: 5
         });
-        console.log("Connected to MongoDB:", uri);
-        return true;
+        
+        await conn.asPromise();
+        connectionPool.set(connectionKey, conn);
+        console.log(`Created new MongoDB connection for session ${sessionId.substring(0, 8)}...`);
+        return conn;
     } catch (err) {
         console.error("MongoDB connection error:", err);
-        return false;
+        throw err;
     }
 }
 
-// Initialize MongoDB schemas
+// Cleanup old connections periodically
+setInterval(() => {
+    for (const [key, conn] of connectionPool.entries()) {
+        if (conn.readyState !== 1) {
+            conn.close().catch(console.error);
+            connectionPool.delete(key);
+        }
+    }
+}, 5 * 60 * 1000); // Every 5 minutes
+
+// MongoDB schemas (will be instantiated per connection)
 const ServerSchema = new mongoose.Schema({
     name: { type: String, required: true, unique: true },
     url: { type: String, required: true },
@@ -138,9 +179,14 @@ const DeploymentSchema = new mongoose.Schema({
     rawPayload: { type: Object },
 });
 
-const Server = mongoose.model("Server", ServerSchema);
-const Log = mongoose.model("Log", LogSchema);
-const Deployment = mongoose.model("Deployment", DeploymentSchema);
+// Get models for a specific connection (session-isolated)
+function getModels(connection) {
+    return {
+        Server: connection.model("Server", ServerSchema),
+        Log: connection.model("Log", LogSchema),
+        Deployment: connection.model("Deployment", DeploymentSchema)
+    };
+}
 
 // Rate Limiting
 const limiter = rateLimit({
@@ -174,19 +220,29 @@ const authenticate = (req, res, next) => {
     }
 };
 
-// Health check function
-const checkServerHealth = async (isGuest = false) => {
+// Health check function - supports both guest mode and authenticated mode
+const checkServerHealth = async (sessionId, isGuest = false, connection = null) => {
     let statuses = {};
     try {
         if (isGuest) {
-            // Return mock data for guest mode
-            for (let server of GUEST_SERVERS) {
-                statuses[server.name] = { status: server.status, reason: server.status === "Up" ? "OK 200" : "Connection failed" };
+            // Use in-memory guest data
+            const guestData = getGuestData(sessionId);
+            for (let server of guestData.servers) {
+                statuses[server.name] = { 
+                    status: server.status, 
+                    reason: server.status === "Up" ? "OK 200" : "Connection failed" 
+                };
             }
             return statuses;
         }
         
+        if (!connection) {
+            throw new Error("Database connection required for authenticated mode");
+        }
+        
+        const { Server, Log } = getModels(connection);
         const servers = await Server.find();
+        
         for (let server of servers) {
             try {
                 const response = await axios.get(server.url, { timeout: 3000 });
@@ -208,6 +264,7 @@ const checkServerHealth = async (isGuest = false) => {
             server.status = statuses[server.name].status;
             await server.save();
         }
+        
         const log = new Log({ timestamp: new Date(), statuses });
         await log.save();
     } catch (error) {
@@ -232,9 +289,8 @@ app.post("/upload-env", upload.single('envFile'), async (req, res) => {
             return res.redirect('/?error=no_file');
         }
         
-        // Parse the uploaded .env file content
-        const envContent = req.file.buffer.toString('utf-8');
-        const config = parseEnvContent(envContent);
+        // Parse the uploaded .env file using dotenv (handles edge cases)
+        const config = parseEnvContent(req.file.buffer);
         
         // Validate required fields
         if (!config.MONGO_URI || !config.API_KEY) {
@@ -250,10 +306,12 @@ app.post("/upload-env", upload.single('envFile'), async (req, res) => {
         };
         req.session.isGuest = false;
         
-        // Connect to MongoDB with user's credentials
-        const connected = await connectToMongoDB(config.MONGO_URI);
-        
-        if (!connected) {
+        // Test connection (will be created per-session on demand)
+        try {
+            const testConn = await getConnection(req.sessionID, config.MONGO_URI);
+            console.log(`User ${req.sessionID.substring(0, 8)}... connected successfully`);
+        } catch (err) {
+            console.error("Connection test failed:", err);
             return res.redirect('/?error=db_connection_failed');
         }
         
@@ -264,14 +322,14 @@ app.post("/upload-env", upload.single('envFile'), async (req, res) => {
     }
 });
 
-// Guest mode route
+// Guest mode route - fully in-memory, no database needed
 app.post("/guest-mode", async (req, res) => {
     try {
         req.session.config = GUEST_CONFIG;
         req.session.isGuest = true;
         
-        // Connect to guest MongoDB
-        await connectToMongoDB(GUEST_CONFIG.MONGO_URI);
+        // Initialize guest data for this session
+        getGuestData(req.sessionID);
         
         res.redirect('/dashboard');
     } catch (error) {
@@ -280,8 +338,28 @@ app.post("/guest-mode", async (req, res) => {
     }
 });
 
-// Logout route - clear session
-app.get("/logout", (req, res) => {
+// Logout route - clear session and cleanup connections
+app.get("/logout", async (req, res) => {
+    const sessionId = req.sessionID;
+    
+    // Cleanup guest data
+    if (guestStorage.has(sessionId)) {
+        guestStorage.delete(sessionId);
+    }
+    
+    // Cleanup database connections for this session
+    for (const [key, conn] of connectionPool.entries()) {
+        if (key.startsWith(sessionId)) {
+            try {
+                await conn.close();
+                connectionPool.delete(key);
+                console.log(`Closed connection for session ${sessionId.substring(0, 8)}...`);
+            } catch (err) {
+                console.error("Connection cleanup error:", err);
+            }
+        }
+    }
+    
     req.session.destroy((err) => {
         if (err) {
             console.error("Session destroy error:", err);
@@ -293,7 +371,12 @@ app.get("/logout", (req, res) => {
 // Status endpoint
 app.get("/status", requireAuth, async (req, res) => {
     try {
-        const serverHealth = await checkServerHealth(req.session.isGuest);
+        let connection = null;
+        if (!req.session.isGuest) {
+            connection = await getConnection(req.sessionID, req.session.config.MONGO_URI);
+        }
+        
+        const serverHealth = await checkServerHealth(req.sessionID, req.session.isGuest, connection);
         res.json({ 
             "CI/CD Status": PIPELINE_STATUS, 
             "Server Health": serverHealth,
@@ -315,17 +398,24 @@ app.post("/deploy", requireAuth, authenticate, async (req, res) => {
         return res.status(403).json({ message: "Cannot deploy in guest mode" });
     }
     
-    PIPELINE_STATUS = "in_progress";
-    const deployment = new Deployment({ version, status: "in_progress", timestamp: new Date() });
-    await deployment.save();
-
-    setTimeout(async () => {
-        PIPELINE_STATUS = "success";
-        deployment.status = "success";
+    try {
+        const connection = await getConnection(req.sessionID, req.session.config.MONGO_URI);
+        const { Deployment } = getModels(connection);
+        
+        PIPELINE_STATUS = "in_progress";
+        const deployment = new Deployment({ version, status: "in_progress", timestamp: new Date() });
         await deployment.save();
-    }, 2000);
 
-    res.json({ message: "Deployment triggered", status: PIPELINE_STATUS, version });
+        setTimeout(async () => {
+            PIPELINE_STATUS = "success";
+            deployment.status = "success";
+            await deployment.save();
+        }, 2000);
+
+        res.json({ message: "Deployment triggered", status: PIPELINE_STATUS, version });
+    } catch (error) {
+        res.status(500).json({ message: "Deployment failed", error: error.message });
+    }
 });
 
 // Add server endpoint
@@ -338,7 +428,11 @@ app.post("/servers", requireAuth, authenticate, async (req, res) => {
     if (!name || !url) {
         return res.status(400).json({ message: "Name and URL are required" });
     }
+    
     try {
+        const connection = await getConnection(req.sessionID, req.session.config.MONGO_URI);
+        const { Server } = getModels(connection);
+        
         const server = new Server({ name, url });
         await server.save();
         res.status(201).json({ message: "Server added", server });
@@ -359,6 +453,9 @@ app.delete("/servers/:name", requireAuth, authenticate, async (req, res) => {
     
     const { name } = req.params;
     try {
+        const connection = await getConnection(req.sessionID, req.session.config.MONGO_URI);
+        const { Server } = getModels(connection);
+        
         const server = await Server.findOneAndDelete({ name });
         if (server) {
             res.json({ message: "Server removed", server });
@@ -377,6 +474,9 @@ app.post('/logs_delete', requireAuth, authenticate, async (req, res) => {
     }
     
     try {
+        const connection = await getConnection(req.sessionID, req.session.config.MONGO_URI);
+        const { Log } = getModels(connection);
+        
         await Log.deleteMany({});
         res.redirect('/dashboard');
     } catch (err) {
@@ -386,27 +486,18 @@ app.post('/logs_delete', requireAuth, authenticate, async (req, res) => {
 });
 
 // Render webhook endpoint
+// Note: Webhooks don't have session context, so this needs special handling
+// For now, webhooks will use a default connection or be disabled
 app.post("/webhooks/render", async (req, res) => {
     try {
         const payload = req.body;
         console.log("Render webhook received:", JSON.stringify(payload, null, 2));
-
-        const deployment = new Deployment({
-            version: payload.commit?.id?.substring(0, 7) || "unknown",
-            status: payload.status || "unknown",
-            timestamp: payload.updatedAt ? new Date(payload.updatedAt) : new Date(),
-            provider: "render",
-            project: payload.service?.name || "unknown",
-            environment: payload.service?.environment || "production",
-            externalId: payload.id,
-            url: payload.service?.url,
-            commitId: payload.commit?.id,
-            commitMessage: payload.commit?.message,
-            rawPayload: payload,
-        });
-
-        await deployment.save();
-        console.log("Render deployment saved:", deployment);
+        
+        // Webhooks are stateless and don't have session context
+        // You would need to authenticate webhooks differently (e.g., webhook secret)
+        // For now, we'll just acknowledge receipt
+        console.warn("Webhook storage disabled in multi-tenant mode - implement webhook authentication");
+        
         res.status(200).json({ message: "Webhook received" });
     } catch (error) {
         console.error("Webhook error:", error);
@@ -418,8 +509,13 @@ app.post("/webhooks/render", async (req, res) => {
 app.get("/deployments", requireAuth, authenticate, async (req, res) => {
     try {
         if (req.session.isGuest) {
-            return res.json(GUEST_DEPLOYMENTS);
+            const guestData = getGuestData(req.sessionID);
+            return res.json(guestData.deployments);
         }
+        
+        const connection = await getConnection(req.sessionID, req.session.config.MONGO_URI);
+        const { Deployment } = getModels(connection);
+        
         const deployments = await Deployment.find();
         res.json(deployments);
     } catch (error) {
@@ -530,12 +626,17 @@ app.get("/dashboard", requireAuth, async (req, res) => {
         let serverHealth, logs, deployments;
         
         if (req.session.isGuest) {
-            // Return mock guest data
-            serverHealth = await checkServerHealth(true);
-            logs = GUEST_LOGS;
-            deployments = GUEST_DEPLOYMENTS;
+            // Use in-memory guest data
+            const guestData = getGuestData(req.sessionID);
+            serverHealth = await checkServerHealth(req.sessionID, true);
+            logs = guestData.logs;
+            deployments = guestData.deployments;
         } else {
-            serverHealth = await checkServerHealth(false);
+            // Use per-session database connection
+            const connection = await getConnection(req.sessionID, req.session.config.MONGO_URI);
+            const { Log, Deployment } = getModels(connection);
+            
+            serverHealth = await checkServerHealth(req.sessionID, false, connection);
             logs = await Log.find().sort({ timestamp: -1 });
             deployments = await Deployment.find().sort({ timestamp: -1 });
         }
@@ -555,17 +656,10 @@ app.get("/dashboard", requireAuth, async (req, res) => {
     }
 });
 
-// Auto health check (only for authenticated users)
-setInterval(async () => {
-    try {
-        // Only run auto checks for non-guest sessions
-        // In a production app, you'd track active sessions
-        await checkServerHealth(false);
-        console.log("Auto health check completed.");
-    } catch (err) {
-        console.error("Auto health check failed:", err);
-    }
-}, 60 * 1000);
+// Auto health check disabled in multi-tenant mode
+// In production, use a proper job queue system (Bull, Agenda) with per-user tasks
+// Global interval timers don't work with per-session isolation
+console.log("Note: Auto health checks disabled in multi-tenant mode. Implement per-user job scheduling for production.");
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
