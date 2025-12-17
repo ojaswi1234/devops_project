@@ -446,7 +446,7 @@ app.post("/servers", requireAuth, authenticate, async (req, res) => {
 });
 
 // Delete server endpoint
-app.delete("/servers/:name", requireAuth, authenticate, async (req, res) => {
+app.delete("/servers/:name", requireAuth, async (req, res) => {
     if (req.session.isGuest) {
         return res.status(403).json({ message: "Cannot delete servers in guest mode" });
     }

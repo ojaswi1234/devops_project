@@ -934,13 +934,11 @@
                 return;
             }
 
-            const apiKey = prompt('Enter API key to confirm server removal:');
-            if (!apiKey) return;
+            if (!confirm('Are you sure you want to remove this server?')) return;
 
             try {
                 const res = await fetch(`/servers/${encodeURIComponent(serverName)}`, {
-                    method: 'DELETE',
-                    headers: { 'x-api-key': apiKey }
+                    method: 'DELETE'
                 });
 
                 const data = await res.json();
