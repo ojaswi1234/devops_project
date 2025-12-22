@@ -59,7 +59,7 @@ app.use(session(sessionConfig));
 
 // Guest mode default configuration - fully in-memory, no database required
 const GUEST_CONFIG = {
-    API_KEY: "guest-api-key-12345",
+    API_KEY: "guest",
     RENDER_API_KEY: "",
     PORT: 3000
 };
@@ -98,14 +98,12 @@ function getGuestData(sessionId) {
     return guestStorage.get(sessionId);
 }
 
-// Parse .env content using battle-tested dotenv parser
 // Handles multiline values, special characters, quotes, and edge cases properly
 function parseEnvContent(buffer) {
     return dotenv.parse(buffer);
 }
 
 // MongoDB Connection Pool Manager - Per Session Isolation
-// This fixes the critical multi-tenancy flaw by creating separate connections per session
 const connectionPool = new Map();
 
 async function getConnection(sessionId, mongoUri) {
@@ -272,6 +270,22 @@ const checkServerHealth = async (sessionId, isGuest = false, connection = null) 
     }
     return statuses;
 };
+
+// Auto-monitoring loop to check server health periodically
+setInterval(async () => {
+    // Check Guest Sessions
+    for (const sessionId of guestStorage.keys()) {
+        await checkServerHealth(sessionId, true);
+    }
+
+    // Check Authenticated Sessions
+    for (const [key, connection] of connectionPool.entries()) {
+        if (connection.readyState === 1) {
+            const sessionId = key.split(':')[0];
+            await checkServerHealth(sessionId, false, connection);
+        }
+    }
+}, 60000); // Run every 60 seconds
 
 app.set('view engine', 'ejs');
 app.set('views', './views');
@@ -485,18 +499,10 @@ app.post('/logs_delete', requireAuth, authenticate, async (req, res) => {
     }
 });
 
-// Render webhook endpoint
-// Note: Webhooks don't have session context, so this needs special handling
-// For now, webhooks will use a default connection or be disabled
 app.post("/webhooks/render", async (req, res) => {
     try {
         const payload = req.body;
         console.log("Render webhook received:", JSON.stringify(payload, null, 2));
-        
-        // Webhooks are stateless and don't have session context
-        // You would need to authenticate webhooks differently (e.g., webhook secret)
-        // For now, we'll just acknowledge receipt
-        console.warn("Webhook storage disabled in multi-tenant mode - implement webhook authentication");
         
         res.status(200).json({ message: "Webhook received" });
     } catch (error) {
@@ -621,7 +627,6 @@ app.get("/dashboard", requireAuth, async (req, res) => {
             urlStatus = "Down";
         }
     }
-
     try {
         let serverHealth, logs, deployments;
         
@@ -655,11 +660,6 @@ app.get("/dashboard", requireAuth, async (req, res) => {
         res.status(500).json({ message: "Internal Server Error", error: error.message });
     }
 });
-
-// Auto health check disabled in multi-tenant mode
-// In production, use a proper job queue system (Bull, Agenda) with per-user tasks
-// Global interval timers don't work with per-session isolation
-console.log("Note: Auto health checks disabled in multi-tenant mode. Implement per-user job scheduling for production.");
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
