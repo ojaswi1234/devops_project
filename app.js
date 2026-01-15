@@ -103,53 +103,93 @@ function parseEnvContent(buffer) {
     return dotenv.parse(buffer);
 }
 
-// MongoDB Connection Pool Manager - Per Session Isolation
-const connectionPool = new Map();
+// MongoDB Connection Manager - Multi-tenant Optimized
+const connectionManager = {
+    // Store active connections: Map<mongoUri, { conn, lastUsed, promise }>
+    connections: new Map(),
+
+    // Get or create a connection for a specific URI
+    async getConnection(mongoUri) {
+        if (!mongoUri) throw new Error("MongoDB URI is required");
+
+        const now = Date.now();
+        let entry = this.connections.get(mongoUri);
+
+        if (entry) {
+            entry.lastUsed = now;
+            // Return existing promise (if connecting) or connection
+            if (entry.promise) return entry.promise;
+            if (entry.conn.readyState === 1 || entry.conn.readyState === 2) return entry.conn;
+            
+            // Connection dead? Remove and retry
+            this.connections.delete(mongoUri);
+        }
+
+        console.log(`[ConnectionManager] New connection requested for ...${mongoUri.slice(-20)}`);
+        
+        // Create new connection promise
+        const connectPromise = (async () => {
+            try {
+                const conn = mongoose.createConnection(mongoUri, {
+                    maxPoolSize: 10, // Reasonable Pool Size per Tenant
+                    serverSelectionTimeoutMS: 5000
+                });
+                
+                await conn.asPromise();
+                
+                // Connection successful - store it
+                this.connections.set(mongoUri, { 
+                    conn, 
+                    lastUsed: Date.now(), 
+                    promise: null 
+                });
+
+                // Self-cleanup on disconnect
+                conn.on('disconnected', () => {
+                    const current = this.connections.get(mongoUri);
+                    if (current && current.conn === conn) {
+                        this.connections.delete(mongoUri);
+                    }
+                });
+
+                return conn;
+            } catch (err) {
+                this.connections.delete(mongoUri);
+                throw err;
+            }
+        })();
+
+        // Store promise immediately to handle concurrent requests
+        this.connections.set(mongoUri, { conn: null, lastUsed: now, promise: connectPromise });
+        return connectPromise;
+    },
+
+    // Get all active connections for monitoring
+    getActiveConnections() {
+        return Array.from(this.connections.values())
+            .filter(e => e.conn && e.conn.readyState === 1)
+            .map(e => e.conn);
+    }
+};
+
+// Background maintenance loop (Cleanup idle connections)
+setInterval(() => {
+    const now = Date.now();
+    const IDLE_TIMEOUT = 10 * 60 * 1000; // 10 minutes
+
+    for (const [uri, entry] of connectionManager.connections.entries()) {
+        if (!entry.promise && (now - entry.lastUsed > IDLE_TIMEOUT)) {
+            console.log(`[ConnectionManager] Closing idle connection: ...${uri.slice(-20)}`);
+            entry.conn.close().catch(console.error);
+            connectionManager.connections.delete(uri);
+        }
+    }
+}, 60 * 1000);
 
 async function getConnection(sessionId, mongoUri) {
-    if (!sessionId || !mongoUri) {
-        throw new Error("Session ID and MongoDB URI are required");
-    }
-    
-    const connectionKey = `${sessionId}:${mongoUri}`;
-    
-    if (connectionPool.has(connectionKey)) {
-        const conn = connectionPool.get(connectionKey);
-        if (conn.readyState === 1) { // Connected
-            return conn;
-        } else {
-            // Connection is dead, remove it
-            connectionPool.delete(connectionKey);
-        }
-    }
-    
-    try {
-        // Create a NEW connection instance for this session
-        const conn = mongoose.createConnection(mongoUri, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
-            maxPoolSize: 5
-        });
-        
-        await conn.asPromise();
-        connectionPool.set(connectionKey, conn);
-        console.log(`Created new MongoDB connection for session ${sessionId.substring(0, 8)}...`);
-        return conn;
-    } catch (err) {
-        console.error("MongoDB connection error:", err);
-        throw err;
-    }
+    // sessionId is ignored in favor of URI-based pooling for efficiency
+    return connectionManager.getConnection(mongoUri);
 }
-
-// Cleanup old connections periodically
-setInterval(() => {
-    for (const [key, conn] of connectionPool.entries()) {
-        if (conn.readyState !== 1) {
-            conn.close().catch(console.error);
-            connectionPool.delete(key);
-        }
-    }
-}, 5 * 60 * 1000); // Every 5 minutes
 
 // MongoDB schemas (will be instantiated per connection)
 const ServerSchema = new mongoose.Schema({
@@ -279,11 +319,10 @@ setInterval(async () => {
     }
 
     // Check Authenticated Sessions
-    for (const [key, connection] of connectionPool.entries()) {
-        if (connection.readyState === 1) {
-            const sessionId = key.split(':')[0];
-            await checkServerHealth(sessionId, false, connection);
-        }
+    const activeConnections = connectionManager.getActiveConnections();
+    for (const connection of activeConnections) {
+        // We pass 'system' as sessionId since it's not used in auth mode
+        await checkServerHealth('system', false, connection);
     }
 }, 60000); // Run every 60 seconds
 
@@ -362,17 +401,8 @@ app.get("/logout", async (req, res) => {
     }
     
     // Cleanup database connections for this session
-    for (const [key, conn] of connectionPool.entries()) {
-        if (key.startsWith(sessionId)) {
-            try {
-                await conn.close();
-                connectionPool.delete(key);
-                console.log(`Closed connection for session ${sessionId.substring(0, 8)}...`);
-            } catch (err) {
-                console.error("Connection cleanup error:", err);
-            }
-        }
-    }
+    // Connections are now managed by the idle timer to support multi-tenant sharing
+    // No manual cleanup needed here
     
     req.session.destroy((err) => {
         if (err) {
