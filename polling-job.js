@@ -1,5 +1,8 @@
 const axios = require("axios");
 const mongoose = require("mongoose");
+const dotenv = require("dotenv");
+
+dotenv.config();
 
 const MONGO_URI = process.env.MONGO_URI;
 const API_KEY = process.env.API_KEY;
