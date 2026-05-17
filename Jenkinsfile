@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    tools {
+        nodejs 'node20'
+    }
+
     // Inject the environment variables Jenkins needs to run the script
     environment {
         MONGO_URI = 'mongodb+srv://ojaswideep2020:123abc456dceF@genz.br57g1q.mongodb.net/'
