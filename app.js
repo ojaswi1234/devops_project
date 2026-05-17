@@ -237,6 +237,15 @@ let PIPELINE_STATUS = "success";
 
 // Middleware to check if user has uploaded credentials
 const requireAuth = (req, res, next) => {
+    if (
+        req.path === "/webhooks/health-sync" &&
+        process.env.MONGO_URI &&
+        process.env.API_KEY
+    ) {
+        req.systemAuth = true;
+        return next();
+    }
+
     if (req.session.isGuest === false && req.session.config) {
         next();
     } else if (req.session.isGuest === true) {
@@ -249,6 +258,14 @@ const requireAuth = (req, res, next) => {
 // Authentication Middleware for API calls
 const authenticate = (req, res, next) => {
     const apiKey = req.headers["x-api-key"];
+
+    if (req.systemAuth) {
+        if (apiKey === process.env.API_KEY) {
+            return next();
+        }
+        return res.status(403).json({ message: "Forbidden: Invalid API Key" });
+    }
+
     const sessionApiKey = req.session.config ? req.session.config.API_KEY : GUEST_CONFIG.API_KEY;
     
     if (apiKey === sessionApiKey) {
@@ -310,21 +327,6 @@ const checkServerHealth = async (sessionId, isGuest = false, connection = null) 
     }
     return statuses;
 };
-
-// Auto-monitoring loop to check server health periodically
-setInterval(async () => {
-    // Check Guest Sessions
-    for (const sessionId of guestStorage.keys()) {
-        await checkServerHealth(sessionId, true);
-    }
-
-    // Check Authenticated Sessions
-    const activeConnections = connectionManager.getActiveConnections();
-    for (const connection of activeConnections) {
-        // We pass 'system' as sessionId since it's not used in auth mode
-        await checkServerHealth('system', false, connection);
-    }
-}, 60000); // Run every 60 seconds
 
 app.set('view engine', 'ejs');
 app.set('views', './views');
@@ -538,6 +540,53 @@ app.post("/webhooks/render", async (req, res) => {
     } catch (error) {
         console.error("Webhook error:", error);
         res.status(500).json({ message: "Webhook processing failed", error: error.message });
+    }
+});
+
+app.post("/webhooks/health-sync", requireAuth, authenticate, async (req, res) => {
+    try {
+        if (!req.systemAuth && req.session.isGuest) {
+            return res.status(403).json({ message: "Cannot sync health data in guest mode" });
+        }
+
+        const { timestamp, statuses } = req.body || {};
+        if (!timestamp || !statuses || typeof statuses !== "object" || Array.isArray(statuses)) {
+            return res.status(400).json({ message: "Invalid payload. Expected { timestamp, statuses }" });
+        }
+
+        const parsedTimestamp = new Date(timestamp);
+        if (Number.isNaN(parsedTimestamp.getTime())) {
+            return res.status(400).json({ message: "Invalid timestamp" });
+        }
+
+        const mongoUri = req.systemAuth ? process.env.MONGO_URI : req.session.config.MONGO_URI;
+        const sessionId = req.systemAuth ? "system" : req.sessionID;
+        const connection = await getConnection(sessionId, mongoUri);
+        const { Server, Log } = getModels(connection);
+
+        const statusEntries = Object.entries(statuses);
+        if (statusEntries.length > 0) {
+            const updateOperations = statusEntries.map(([name, healthData]) => ({
+                updateOne: {
+                    filter: { name },
+                    update: { $set: { status: healthData?.status || "Unknown" } },
+                    upsert: false,
+                },
+            }));
+
+            await Server.bulkWrite(updateOperations, { ordered: false });
+        }
+
+        const logEntry = new Log({ timestamp: parsedTimestamp, statuses });
+        await logEntry.save();
+
+        res.status(200).json({
+            message: "Health sync processed",
+            updatedServers: statusEntries.length,
+        });
+    } catch (error) {
+        console.error("Health sync webhook error:", error);
+        res.status(500).json({ message: "Health sync failed", error: error.message });
     }
 });
 
