@@ -9,6 +9,18 @@ services:
     depends_on:
       - mongo
 
+  jenkins:
+    image: jenkins/jenkins:lts-jdk17
+    container_name: jenkins-controller
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+    environment:
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
+
   mongo:
     image: mongo:6
     container_name: server-health-mongo
@@ -20,3 +32,4 @@ services:
 
 volumes:
   mongo-data:
+  jenkins_home:
